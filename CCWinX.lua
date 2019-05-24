@@ -5,6 +5,9 @@ local log = CCLog and (CCLog.CCLog and CCLog.CCLog("CCWinX") or CCLog("CCWinX"))
 local CCWinX = {}
 local displays = {}
 
+--- Opens a display for a program to use.
+-- @param id The id of the monitor (either a string, or a number: 0 = native terminal, >0 = monitor id + 1 ("monitor_1" = 2))
+-- @return An object describing the display or nil
 function CCWinX.OpenDisplay(client, id)
     if displays[id] ~= nil then 
         for k,v in pairs(retval.clients) do if v == client then
@@ -45,6 +48,9 @@ function CCWinX.OpenDisplay(client, id)
     return retval
 end
 
+--- Closes a display object and the windows associated with it.
+-- @param disp The display object
+-- @return Whether the command succeeded
 function CCWinX.CloseDisplay(client, disp)
     if type(disp) ~= "table" then
         log:error("Type error at CloseDisplay (#1): expected table, got " .. type(disp))
@@ -77,10 +83,31 @@ function CCWinX.CloseDisplay(client, disp)
     return true
 end
 
+--- Creates a window.
+-- @param display The display to create the window on
+-- @param parent The parent window of the new window
+-- @param x The X coordinate of the window
+-- @param y The Y coordinate of the window
+-- @param width The width of the window
+-- @param height The height of the window
+-- @param border_width The width of the window border
+-- @param depth 
+function CCWinX.CreateWindow(client, display, parent, x, y, width, height, border_width, depth, visual, attribute)
+
+end
+
+function CCWinX.CreateSimpleWindow(client, display, parent, x, y, width, height, border_width, border, background)
+
+end
+
 -- If run under CCKernel2 through a shell or forked: start a CCWinX server to listen to apps
 -- If loaded as an API under CCKernel2: provide functions to send messages to a CCWinX server
 -- If run without CCKernel2 through a shell: do nothing
 -- If loaded as an API without CCKernel2: provide functions to run a server through messages
+
+local function ServeWindows(...)
+
+end
 
 if shell or _FORK then
     if kernel then
@@ -91,11 +118,12 @@ if shell or _FORK then
             local args = {os.pullEvent()}
             local ev = table.remove(args, 1)
             local pid = table.remove(args, 1)
-            if ev == "CCWinX.GetServerPID" and type(args[1]) == "number" then
+            if ev == "CCWinX.GetServerPID" and type(pid) == "number" then
                 kernel.send(pid, "CCWinX.ServerPID", _PID)
             elseif type(CCWinX[ev]) == "function" then
                 kernel.send(pid, "CCWinX."..ev, CCWinX[ev](pid, table.unpack(args)))
             end
+            ServeWindows(ev, pid, table.unpack(args))
         end
     else
         print("CCWinX requires CCKernel2 to run in server mode. Without CCKernel2, programs can only load CCWinX as an API.")
@@ -121,6 +149,6 @@ else
             end
         end
     else
-
+        for k,v in pairs(CCWinX) do _ENV[k] = function(...) return CCWinX[k](0, ...) end end
     end
 end
