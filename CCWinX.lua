@@ -1,4 +1,5 @@
 local _FORK = _FORK
+if term.setGraphicsMode == nil then error("CCWinX requires CraftOS-PC v1.2 or later.") end
 _ = os.loadAPI("CCLog.lua") or (shell and os.loadAPI(fs.getDir(shell.getRunningProgram()) .. "/CCLog.lua")) or print("CCLog not installed, logging will be disabled.")
 local log = CCLog and (CCLog.CCLog and CCLog.CCLog("CCWinX") or CCLog("CCWinX")) or {log = function() end, debug = function() end, info = function() end, warn = function() end, error = function() end, critical = function() end, traceback = function() end, open = function() end, close = function() end}
 
@@ -91,11 +92,25 @@ end
 -- @param width The width of the window
 -- @param height The height of the window
 -- @param border_width The width of the window border
--- @param depth 
-function CCWinX.CreateWindow(client, display, parent, x, y, width, height, border_width, depth, visual, attribute)
+-- @param class The class of the window
+-- @param attribute A table of attributes applied to the window.
+-- @return A window object
+function CCWinX.CreateWindow(client, display, parent, x, y, width, height, border_width, class, attribute)
+    local retval = {}
 
 end
 
+--- Creates a simple window.
+-- @param display The display to create the window on
+-- @param parent The parent window of the new window
+-- @param x The X coordinate of the window
+-- @param y The Y coordinate of the window
+-- @param width The width of the window
+-- @param height The height of the window
+-- @param border_width The width of the window border
+-- @param border The color of the border
+-- @param background The color of the background
+-- @return A window object
 function CCWinX.CreateSimpleWindow(client, display, parent, x, y, width, height, border_width, border, background)
 
 end
@@ -117,6 +132,15 @@ if shell or _FORK then
         while true do
             local args = {os.pullEvent()}
             local ev = table.remove(args, 1)
+            if ev == "key" or ev == "char" or ev == "key_up" then
+                local pids = {}
+                for k,v in pairs(displays) do for l,w in pairs(v.clients) do if not pids[w] then
+                    kernel.send(w, ev, table.unpack(args))
+                    pids[w] = true
+                end end end
+            elseif ev == "mouse_click" or ev == "mouse_up" or ev == "mouse_drag" or ev == "mouse_scroll" then
+                -- Handle mouse events
+            end
             local pid = table.remove(args, 1)
             if ev == "CCWinX.GetServerPID" and type(pid) == "number" then
                 kernel.send(pid, "CCWinX.ServerPID", _PID)

@@ -9,7 +9,7 @@ if shell then
         if ev == "window_create" then
             local pid = table.remove(args, 1)
             local k = table.maxn(windows) + 1
-            if args[1] == "native" then args[1] = term.native() end
+            if args[1] == "native" then args[1] = term.current() end
             if #args < 5 then kernel.send(pid, "window_create_response", nil) else
                 local v = window.create(table.unpack(args))
                 v.parent = args[1]
