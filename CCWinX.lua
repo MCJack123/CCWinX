@@ -7,10 +7,10 @@ local CCWinX = {}
 local displays = {}
 
 local function qs(tab)
-    if (type(tab) ~= "table" and type(tab) ~= "function") or kernel then return tab end
+    if (type(tab) ~= "table" and type(tab) ~= "function") or kernel or true then return tab end
     if type(tab) == "function" then return nil end
     local retval = {}
-    for k,v in pairs(tab) do retval[makeQueueSafe(k)] = makeQueueSafe(v) end
+    for k,v in pairs(tab) do retval[qs(k)] = qs(v) end
     return retval
 end
 local function sendEvent(...) if kernel then kernel.broadcast(...) else os.queueEvent(...) end end
@@ -19,7 +19,8 @@ Error = {
     BadColor = 0,
     BadMatch = 1,
     BadValue = 2,
-    BadWindow = 3
+    BadWindow = 3,
+    BadDrawable = 4,
 }
 
 StackMode = {
@@ -28,6 +29,59 @@ StackMode = {
     TopIf = 2,
     BottomIf = 3,
     Opposite = 4
+}
+
+Vertex = {
+    Relative = 0x01,
+    DontDraw = 0x02,
+    Curved = 0x04,
+    StartClosed = 0x08,
+    EndClosed = 0x10
+}
+
+GCFunc = {
+    GXclear = 0,
+    GXand = 1,
+    GXandReverse = 2,
+    GXcopy = 3,
+    GXandInverted = 4,
+    GXnoop = 5,
+    GXxor = 6,
+    GXor = 7,
+    GXnor = 8,
+    GXequiv = 9,
+    GXinvert = 10,
+    GXorReverse = 11,
+    GXcopyInverted = 12,
+    GXorInverted = 13,
+    GXnand = 14,
+    GXset = 15
+}
+
+Line = {
+    Solid = 0,
+    DoubleDash = 1,
+    OnOffDash = 2
+}
+
+Cap = {
+    NotLast = 0,
+    Butt = 1,
+    Round = 2,
+    Projecting = 3
+}
+
+Join = {
+    Miter = 0,
+    Round = 1,
+    Bevel = 2
+}
+
+Fill = {
+    Solid = 0,
+    Tiled = 1,
+    OpaqueStippled = 2,
+    Stippled = 3
 }
 
 --- Opens a display for a program to use.
@@ -50,13 +104,13 @@ function CCWinX.OpenDisplay(client, id)
 
     if type(id) == "string" and peripheral.getType(id) == "monitor" then
         local t = peripheral.wrap(id)
-        setmetatable(retval, {__index = function(key) return t[key] end})
+        setmetatable(retval, {__index = function(tab, key) return t[key] end})
     elseif type(id) == "number" and id == 0 then
         local native = term.native()
-        setmetatable(retval, {__index = function(key) return native[key] end})
+        setmetatable(retval, {__index = function(tab, key) return native[key] end})
     elseif type(id) == "number" and peripheral.isPresent("monitor_" .. (id + 1)) then
         local t = peripheral.wrap("monitor_" .. (id + 1))
-        setmetatable(retval, {__index = function(key) return t[key] end})
+        setmetatable(retval, {__index = function(tab, key) return t[key] end})
     else
         log:error("Cannot open display: " .. id)
         return nil
@@ -73,25 +127,27 @@ function CCWinX.OpenDisplay(client, id)
     root.frame.width = w * 6
     root.frame.height = h * 9
     root.class = 1 -- may use later
+    root.default_color = 0
     root.attributes = {}
     root.border = {}
     root.border.width = 0
-    root.border.color = nil
+    root.border.color = 0
     root.buffer = {}
     root.children = {}
     function root.clear()
-        for y = 1, frame.height do
+        for y = 1, root.frame.height do
             root.buffer[y] = {}
-            for x = 1, frame.width do
+            for x = 1, root.frame.width do
                 root.buffer[y][x] = root.default_color
             end
         end
     end
     function root.setPixel(x, y, c) root.buffer[y][x] = c end
     function root.getPixel(x, y) return root.buffer[y][x] end
+    function root.drawPixel(x, y, c) retval.setPixel(x, y, c) end
     function root.draw()
         for y,r in pairs(root.buffer) do for x,c in pairs(r) do 
-            retval.setPixel(root.frame.x + x, root.frame.y + y, c or retval.getPixel(root.frame.x + x, root.frame.y + y)) 
+            retval.setPixel(root.frame.x + x - 1, root.frame.y + y - 1, c > 0 and c or retval.getPixel(root.frame.x + x - 1, root.frame.y + y - 1)) 
         end end
     end
     root.clear()
@@ -123,7 +179,8 @@ function CCWinX.CloseDisplay(client, disp)
     local delete = {}
     for k,v in pairs(disp.windows) do if v.owner == client then table.insert(delete, k) end end
     for k,v in pairs(delete) do
-        -- close window properly
+        CCWinX.DestroyWindow(disp.windows[v])
+        disp.windows[v] = nil
     end
     if #disp.clients == 0 then
         term.setGraphicsMode(false)
@@ -150,7 +207,7 @@ end
 -- @param attributes A table of attributes applied to the window.
 -- @return A window object
 function CCWinX.CreateWindow(client, display, parent, x, y, width, height, border_width, class, attributes)
-    if x + width > parent.width or y + height > parent.height then
+    if x + width > parent.frame.width or y + height > parent.frame.height then
         return Error.BadValue
     end
     if type(parent) ~= nil 
@@ -179,23 +236,24 @@ function CCWinX.CreateWindow(client, display, parent, x, y, width, height, borde
     retval.buffer = {}
     retval.children = {}
     function retval.clear()
-        for y = 1, frame.height do
+        for y = 1, retval.frame.height do
             retval.buffer[y] = {}
-            for x = 1, frame.width do
+            for x = 1, retval.frame.width do
                 retval.buffer[y][x] = retval.default_color
             end
         end
     end
     function retval.setPixel(x, y, c) retval.buffer[y][x] = c end
     function retval.getPixel(x, y) return retval.buffer[y][x] end
+    function retval.drawPixel(x, y, c) parent.drawPixel(x, y, c) end
     function retval.draw()
         for y,r in pairs(retval.buffer) do for x,c in pairs(r) do 
-            parent.setPixel(retval.frame.x + x, retval.frame.y + y, c or parent.getPixel(retval.frame.x + x, retval.frame.y + y)) 
+            parent.setPixel(retval.frame.x + x - 1, retval.frame.y + y - 1, c > 0 and c or parent.getPixel(retval.frame.x + x, retval.frame.y + y)) 
         end end
     end
     retval.clear()
     table.insert(parent.children, 1, retval)
-    sendEvent("CreateNotify", false, display, parent, retval, x, y, width, height, border_width, retval.attributes.override_redirect)
+    sendEvent("CreateNotify", client, false, display, parent, retval, x, y, width, height, border_width, retval.attributes.override_redirect)
     return retval
 end
 
@@ -211,16 +269,16 @@ end
 -- @param background The color of the background
 -- @return A window object
 function CCWinX.CreateSimpleWindow(client, display, parent, x, y, width, height, border_width, border, background)
-    if x + width > parent.width or y + height > parent.height then
-        return Error.BadValue
-    end
-    if type(parent) ~= nil 
+    if type(parent) ~= "table" 
         or parent.default_color == nil 
         or parent.border == nil 
         or parent.border.color == nil 
         or parent.setPixel == nil 
         or parent.children == nil then
         return Error.BadWindow
+    end
+    if x + width > parent.frame.width or y + height > parent.frame.height then
+        return Error.BadValue
     end
     local retval = {}
     retval.owner = client
@@ -240,23 +298,24 @@ function CCWinX.CreateSimpleWindow(client, display, parent, x, y, width, height,
     retval.buffer = {}
     retval.children = {}
     function retval.clear()
-        for y = 1, frame.height do
+        for y = 1, retval.frame.height do
             retval.buffer[y] = {}
-            for x = 1, frame.width do
+            for x = 1, retval.frame.width do
                 retval.buffer[y][x] = retval.default_color
             end
         end
     end
     function retval.setPixel(x, y, c) retval.buffer[y][x] = c end
     function retval.getPixel(x, y) return retval.buffer[y][x] end
+    function retval.drawPixel(x, y, c) parent.drawPixel(x, y, c) end
     function retval.draw()
         for y,r in pairs(retval.buffer) do for x,c in pairs(r) do 
-            parent.setPixel(retval.frame.x + x, retval.frame.y + y, c or parent.getPixel(retval.frame.x + x, retval.frame.y + y)) 
+            parent.drawPixel(retval.frame.x + x - 1, retval.frame.y + y - 1, c > 0 and c or parent.getPixel(retval.frame.x + x, retval.frame.y + y)) 
         end end
     end
     retval.clear()
     table.insert(parent.children, 1, retval)
-    sendEvent("CreateNotify", false, qs(display), qs(parent), qs(retval), x, y, width, height, border_width, retval.attributes.override_redirect)
+    sendEvent("CreateNotify", client, false, qs(display), qs(parent), qs(retval), x, y, width, height, border_width, retval.attributes.override_redirect)
     return retval
 end
 
@@ -308,7 +367,7 @@ function CCWinX.ClearArea(client, display, w, x, y, width, height, exposures)
     for py = y, y + height do for px = x, x + width do
         w.setPixel(px, py, w.default_color)
     end end
-    if exposures then sendEvent("Expose", false, qs(display), qs(w), x, y, width, height, 0) end
+    if exposures then sendEvent("Expose", client, false, qs(display), qs(w), x, y, width, height, 0) end
 end
 
 --- Clears an entire window.
@@ -468,6 +527,154 @@ function CCWinX.ConfigureWindow(client, display, w, values)
     end
 end
 
+local function copyop(src, dst, func)
+    if func == GCFunc.GXclear then return 0
+    elseif func == GCFunc.GXand then return bit.band(src, dest)
+    elseif func == GCFunc.GXandReverse then return bit.band(src, bit.bnot(dst))
+    elseif func == GCFunc.GXcopy then return src
+    elseif func == GCFunc.GXandInverted then return bit.band(bit.bnot(src), dst)
+    elseif func == GCFunc.GXnoop then return dst
+    elseif func == GCFunc.GXxor then return bit.bxor(src, dst)
+    elseif func == GCFunc.GXor then return bit.bor(src, dst)
+    elseif func == GCFunc.GXnor then return bit.bor(bit.bnot(src), bit.bnot(dst))
+    elseif func == GCFunc.GXequiv then return bit.bxor(bit.bnot(src), dst)
+    elseif func == GCFunc.GXinvert then return bit.bnot(dst)
+    elseif func == GCFunc.GXorReverse then return bit.bor(src, bit.bnot(dst))
+    elseif func == GCFunc.GXcopyInverted then return bit.bnot(src)
+    elseif func == GCFunc.GXorInverted then return bit.bor(bit.bnot(src), dst)
+    elseif func == GCFunc.GXnand then return bit.bor(bit.bnot(src), bit.bnot(dst))
+    elseif func == GCFunc.GXset then return 1
+    else return src end
+end
+
+--- Copies an area between two drawable sources (including windows).
+-- @param display The display of the drawables
+-- @param src The source drawable to copy from
+-- @param dest The destination drawable to copy to
+-- @param gc The graphics context to use
+-- @param src_x The source X coordinate
+-- @param src_y The source Y coordinate
+-- @param width The width of the region to copy
+-- @param height The height of the region to copy
+-- @param dest_x The destination X coordinate
+-- @param dest_y The destination Y coordinate
+function CCWinX.CopyArea(client, display, src, dest, gc, src_x, src_y, width, height, dest_x, dest_y)
+    if type(src) ~= "table" 
+        or type(dest) ~= "table" 
+        or src.setPixel == nil 
+        or src.getPixel == nil 
+        or dest.setPixel == nil 
+        or dest.getPixel == nil 
+        or src.frame == nil 
+        or dest.frame == nil then 
+        return Error.BadDrawable end
+    if src.display ~= display or dest.display ~= display then return Error.BadMatch end
+    if src_x + width > src.frame.width or src_y + height > src.frame.height or dest_x + width > dest.frame.width or dest_y + height > dest.frame.height then return Error.BadMatch end
+    for y = 1, height do for x = 1, width do
+        dest.setPixel(dest_x + x, dest_y + y, copyop(src.getPixel(src_x + x, src_y + y), dest.getPixel(src_x + x, src_y + y), gc["function"]))
+    end end
+end
+
+--- Creates a new colormap.
+-- @param display The display to use
+-- @return The new colormap
+function CCWinX.CreateColormap(client, display)
+    local retval = {}
+    for k,v in pairs(colors) do if type(v) == "number" then
+        retval[k] = {}
+        retval[k].r, retval[k].g, retval[k].b = display.getPaletteColor(v)
+        retval[k].r = retval[k].r * 255
+        retval[k].g = retval[k].g * 255
+        retval[k].b = retval[k].b * 255
+    end end
+    return retval
+end
+
+--- Creates a new graphics context.
+-- @param display The display to use
+-- @param d The drawable to use
+-- @param values Any values to override
+-- @return A new graphics context
+function CCWinX.CreateGC(client, display, d, values)
+    local retval = {
+        ["function"] = GCFunc.GXcopy,
+        foreground = colors.white,
+        background = colors.black,
+        line_width = 0,
+        line_style = Line.Solid,
+        cap_style = Cap.Butt,
+        join_style = Join.Miter,
+        fill_style = Fill.Solid,
+        fill_rule = false,
+        arc_mode = false,
+        subwindow_mode = false,
+        graphics_exposures = True,
+        dash_offset = 0,
+        dashes = {4, 4}
+    }
+    for k,v in pairs(values) do retval[k] = v end
+    return retval
+end
+
+--- Creates a drawable pixmap.
+-- @param display The display to use
+-- @param d The parent drawable
+-- @param width The width of the pixmap
+-- @param height The height of the pixmap
+-- @return A new pixmap
+function CCWinX.CreatePixmap(client, display, d, width, height)
+    if width < 1 or height < 1 then return Error.BadValue end
+    local retval = {}
+    retval.client = client
+    retval.display = display
+    retval.parent = d
+    retval.frame = {}
+    retval.frame.x = 0
+    retval.frame.y = 0
+    retval.frame.width = width
+    retval.frame.height = height
+    retval.buffer = {}
+    function retval.clear()
+        for y = 1, frame.height do
+            retval.buffer[y] = {}
+            for x = 1, frame.width do
+                retval.buffer[y][x] = retval.default_color
+            end
+        end
+    end
+    function retval.setPixel(x, y, c) retval.buffer[y][x] = c end
+    function retval.getPixel(x, y) return retval.buffer[y][x] end
+    retval.clear()
+    return retval
+end
+
+local function rgbtab(num) return {r = bit.brshift(num, 16), g = bit.band(bit.brshift(num, 8), 0xFF), b = bit.band(num, 0xFF)} end
+
+--- Returns the default colormap.
+-- @return A colormap with the default colors
+function CCWinX.DefaultColormap()
+    return {
+        white = rgbtab(0xF0F0F0),
+        orange = rgbtab(0xF2B233),
+        magenta = rgbtab(0xE57FD8),
+        lightBlue = rgbtab(0x99B2F2),
+        yellow = rgbtab(0xDEDE6C),
+        lime = rgbtab(0x7FCC19),
+        pink = rgbtab(0xF2B2CC),
+        gray = rgbtab(0x4C4C4C),
+        lightGray = rgbtab(0x999999),
+        cyan = rgbtab(0x4C99B2),
+        purple = rgbtab(0xB266E5),
+        blue = rgbtab(0x3366CC),
+        brown = rgbtab(0x7F664C),
+        green = rgbtab(0x57A64E),
+        red = rgbtab(0xCC4C4C),
+        black = rgbtab(0x191919)
+    }
+end
+
+CCWinX.DefaultColormapOfScreen = CCWinX.DefaultColormap
+
 --- Returns the root window for the display.
 -- @param display The display to check
 -- @return The root window of the display
@@ -486,7 +693,7 @@ function CCWinX.DestroySubwindows(client, display, w)
     local delete = {}
     for k,v in pairs(w.children) do delete[k] = v end
     for k,v in pairs(delete) do
-        local r = CCWinX.DestroyWindow(v)
+        local r = CCWinX.DestroyWindow(client, display, v)
         if r then return r end
     end
     w.children = {}
@@ -503,7 +710,7 @@ function CCWinX.DestroyWindow(client, display, w)
         table.remove(w.parent.children, k)
         break
     end end
-    sendEvent("DestroyNotify", false, qs(display), qs(w.parent), qs(w))
+    sendEvent("DestroyNotify", client, false, qs(display), qs(w.parent), qs(w))
     local keys = {}
     for k,v in pairs(w) do table.insert(keys, k) end
     for _,k in pairs(keys) do w[k] = nil end
@@ -518,6 +725,164 @@ function CCWinX.DisplayWidth(client, display) return display.root and display.ro
 -- @param display The display to check
 -- @return The height of the display
 function CCWinX.DisplayHeight(client, display) return display.root and display.root.frame.height end
+
+--- Draws a polygon or curve from a list of vertices.
+-- @param display The display to use
+-- @param d The object to draw on
+-- @param gc The graphics context to use
+-- @param vlist The list of vertices (vertex = table {x, y, flags})
+
+function CCWinX.Draw(client, display, d, vlist)
+    if type(d) ~= "table" or type(vlist) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
+
+end
+
+local function circle_func(w, h, x)
+    w=w/2
+    h=h/2
+    return h + math.sqrt((1 - ((w - x)^2 / w^2)) * h^2),
+           h - math.sqrt((1 - ((w - x)^2 / w^2)) * h^2)
+end
+
+--- Draws a single arc. (WIP)
+-- @param display The display to use
+-- @param d The object to draw on
+-- @param gc The graphics context to use
+-- @param x The X coordinate of the bounding box
+-- @param y The Y coordinate of the bounding box
+-- @param width The width of the bounding box
+-- @param height The height of the bounding box
+-- @param angle1 The start of the arc relative to the three-o'clock position from the center in degrees
+-- @param angle2 The number of degrees of the arc relative to the start
+function CCWinX.DrawArc(client, display, d, gc, x, y, width, height, angle1, angle2)
+    if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
+    if x + width > d.frame.width or y + height > d.frame.height then return Error.BadMatch end
+    if angle2 >= 360 then angle2 = 359.99999999999 end
+    local ly1 = height / 2
+    local ly2 = height / 2
+    for px = 1, width do
+        local y1, y2 = circle_func(width, height, px)
+        local theta1 = math.deg(math.atan((y1 - (height / 2)) / (px - (width / 2)))) + 90
+        local theta2 = math.deg(math.atan((y2 - (height / 2)) / (px - (width / 2)))) + 270
+        if theta1 >= angle1 and theta1 < (angle1 + angle2) then
+            for py = math.min(ly1, y1), math.max(ly1, y1) do 
+                d.setPixel(math.floor(width + x - px), math.floor(y + py), gc.foreground) 
+            end
+        end
+        if theta2 >= angle1 and theta2 < (angle1 + angle2) then 
+            for py = math.min(ly2, y2), math.max(ly2, y2) do
+                d.setPixel(math.floor(width + x - px), math.floor(y + py), gc.foreground) 
+            end
+        end
+        ly1 = y1
+        ly2 = y2
+    end
+end
+
+--- Draws a list of arcs.
+-- @param display The display to use
+-- @param d The object to draw on
+-- @param gc The graphics context to use
+-- @param arcs The list of arcs
+function CCWinX.DrawArcs(client, display, d, gc, arcs)
+    for k,v in pairs(arcs) do
+        local r = CCWinX.DrawArc(client, display, d, gc, v.x, v.y, v.width, v.height, v.angle1, v.angle2)
+        if r then return r end
+    end
+end
+
+--- Draws a single line.
+-- @param display The display to use
+-- @param d The object to draw on
+-- @param gc The graphics context to use
+-- @param x1 The start X coordinate
+-- @param y1 The start Y coordinate
+-- @param x2 The end X coordinate
+-- @param y2 The end Y coordinate
+function CCWinX.DrawLine(client, display, d, gc, x1, y1, x2, y2)
+    if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
+    if x1 > d.frame.width or x2 > d.frame.width or y1 > d.frame.height or y2 > d.frame.height then return Error.BadMatch end
+    local dx = x2 - x1
+    local dy = y2 - y1
+    local de = math.abs(dy / dx)
+    local e = 0
+    local y = y1
+    for x = x1, x2 do
+        d.setPixel(x, y, gc.foreground)
+        e = e + de
+        if e >= 0.5 then
+            y = y + (dy < 0 and -1 or 1) * 1
+            e = e - 1
+        end
+    end
+end
+
+--- Draws a list of lines.
+-- @param display The display to use
+-- @param d The object to draw on
+-- @param gc The graphics context to use
+-- @param lines The list of lines
+function CCWinX.DrawLines(client, display, d, gc, lines)
+    for k,v in pairs(lines) do
+        local r = CCWinX.DrawLine(client, display, d, gc, v.x1, v.y1, v.x2, v.y2)
+        if r then return r end
+    end
+end
+
+--- Draws a single point.
+-- @param display The display to use
+-- @param d The object to draw on
+-- @param gc The graphics context to use
+-- @param x The X coordinate of the point
+-- @param y The Y coordinate of the point
+function CCWinX.DrawPoint(client, display, d, gc, x, y)
+    if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
+    if x > d.frame.width or y > d.frame.height then return Error.BadMatch end
+    d.setPixel(x, y, gc.foreground)
+end
+
+--- Draws a list of points.
+-- @param display The display to use
+-- @param d The object to draw on
+-- @param gc The graphics context to use
+-- @param points The list of points
+function CCWinX.DrawPoints(client, display, d, gc, points)
+    for k,v in pairs(points) do
+        local r = CCWinX.DrawPoint(client, display, d, gc, v.x, v.y)
+        if r then return r end
+    end
+end
+
+--- Draws a rectangle outline.
+-- @param display The display to use
+-- @param d The object to draw on
+-- @param gc The graphics context to use
+-- @param x The X coordinate of the rectangle
+-- @param y The Y coordinate of the rectangle
+-- @param width The width of the rectangle
+-- @param height The height of the rectangle
+function CCWinX.DrawRectangle(client, display, d, gc, x, y, width, height)
+    if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
+    if x + width > d.frame.width or y + height > d.frame.height then return Error.BadMatch end
+    return CCWinX.DrawLines(client, display, d, gc, {
+        {x1 = x, y1 = y, x2 = x + width, y2 = y},
+        {x1 = x + width, y1 = y, x2 = x + width, y2 = y + height},
+        {x1 = x + width, y1 + y + height, x2 = x, y2 = y + height},
+        {x1 = x, y1 = y + height, x2 = x, y2 = y}
+    })
+end
+
+--- Draws a list of rectangles.
+-- @param display The display to use
+-- @param d The object to draw on
+-- @param gc The graphics context to use
+-- @param rectangles The list of rectangles
+function CCWinX.DrawRectangles(client, display, d, gc, rectangles)
+    for k,v in pairs(rectangles) do
+        local r = CCWinX.DrawRectangle(client, display, d, gc, v.x, v.y, v.width, v.height)
+        if r then return r end
+    end
+end
 
 -- If run under CCKernel2 through a shell or forked: start a CCWinX server to listen to apps
 -- If loaded as an API under CCKernel2: provide functions to send messages to a CCWinX server
