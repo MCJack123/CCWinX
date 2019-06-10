@@ -1,10 +1,183 @@
 local _FORK = _FORK
 if term.setGraphicsMode == nil then error("CCWinX requires CraftOS-PC v1.2 or later.") end
 _ = os.loadAPI("CCLog.lua") or (shell and os.loadAPI(fs.getDir(shell.getRunningProgram()) .. "/CCLog.lua")) or print("CCLog not installed, logging will be disabled.")
-local log = CCLog and (CCLog.CCLog and CCLog.CCLog("CCWinX") or CCLog("CCWinX")) or {log = function() end, debug = function() end, info = function() end, warn = function() end, error = function() end, critical = function() end, traceback = function() end, open = function() end, close = function() end}
+local log = CCLog and (CCLog.CCLog and CCLog.CCLog("CCWinX") or CCLog("CCWinX")) or {
+    log = function() end, 
+    debug = function() end, 
+    info = function() end, 
+    warn = function() end, 
+    error = function() end, 
+    critical = function() end, 
+    traceback = function() end, 
+    open = function() end, 
+    close = function() end
+}
 
 local CCWinX = {}
 local displays = {}
+fonts = {}
+local font_dirs = {"CCWinX/fonts"}
+
+-- BDF parser
+local function string_split(str, tok)
+    words = {}
+    for word in str:gmatch(tok) do table.insert(words, word) end
+    return words
+end
+
+local function string_split_word(text)
+    local spat, epat, buf, quoted = [=[^(['"])]=], [=[(['"])$]=]
+    local retval = {}
+    for str in text:gmatch("%S+") do
+        local squoted = str:match(spat)
+        local equoted = str:match(epat)
+        local escaped = str:match([=[(\*)['"]$]=])
+        if squoted and not quoted and not equoted then
+            buf, quoted = str, squoted
+        elseif buf and equoted == quoted and #escaped % 2 == 0 then
+            str, buf, quoted = buf .. ' ' .. str, nil, nil
+        elseif buf then
+            buf = buf .. ' ' .. str
+        end
+        if not buf then table.insert(retval, (str:gsub(spat,""):gsub(epat,""))) end
+    end
+    if buf then log:error("Missing matching quote for " .. buf) end
+    return retval
+end
+
+local function foreach(func, ...)
+    local retval = {}
+    for k,v in pairs({...}) do retval[k] = func(v) end
+    return table.unpack(retval)
+end
+
+local function parseValue(str) 
+    local ok, res = pcall(loadstring("return " .. string.gsub(str, "`", "")))
+    if not ok then return str else return res end
+end
+
+local function parseLine(str)
+    local tok = string_split_word(str)
+    return table.remove(tok, 1), foreach(parseValue, table.unpack(tok))
+end
+
+local propertymap = {
+    FOUNDRY = "foundry",
+    FAMILY_NAME = "family",
+    WEIGHT_NAME = "weight",
+    SLANT = "slant",
+    SETWIDTH_NAME = "weight_name",
+    ADD_STYLE_NAME = "add_style_name",
+    PIXEL_SIZE = "pixels",
+    POINT_SIZE = "points",
+    SPACING = "spacing",
+    AVERAGE_WIDTH = "average_width",
+    FONT_NAME = "name",
+    FACE_NAME = "face_name",
+    COPYRIGHT = "copyright",
+    FONT_VERSION = "version",
+    FONT_ASCENT = "ascent",
+    FONT_DESCENT = "descent",
+    UNDERLINE_POSITION = "underline_position",
+    UNDERLINE_THICKNESS = "underline_thickness",
+    X_HEIGHT = "height_x",
+    CAP_HEIGHT = "height_cap",
+    RAW_ASCENT = "raw_ascent",
+    RAW_DESCENT = "raw_descent",
+    NORM_SPACE = "normal_space",
+    RELATIVE_WEIGHT = "relative_weight",
+    RELATIVE_SETWIDTH = "relative_setwidth",
+    FIGURE_WIDTH = "figure_width",
+    AVG_LOWERCASE_WIDTH = "average_lower_width",
+    AVG_UPPERCASE_WIDTH = "average_upper_width"
+}
+
+local function ffs(value)
+    if value == 0 then return 0 end
+    local pos = 0;
+    while bit.band(value, 1) == 0 do
+        value = bit.blogic_rshift(value, 1);
+        pos = pos + 1
+    end
+    return pos
+end
+
+local function readBDFFont(str)
+    local retval = {comments = {}, resolution = {}, superscript = {}, subscript = {}, charset = {}, chars = {}}
+    local mode = 0
+    local ch
+    local charname
+    local chl = 1
+    for line in str:gmatch("[^\n]+") do
+        local values = {parseLine(line)}
+        local key = table.remove(values, 1)
+        if mode == 0 then
+            if (key ~= "STARTFONT" or values[1] ~= 2.1) then 
+                log:error("Attempted to load invalid BDF font")
+                return nil
+            else mode = 1 end
+        elseif mode == 1 then
+            if key == "FONT" then retval.id = values[1]
+            elseif key == "SIZE" then retval.size = {px = values[1], x_dpi = values[2], y_dpi = values[3]}
+            elseif key == "FONTBOUNDINGBOX" then retval.bounds = {x = values[3], y = values[4], width = values[1], height = values[2]}
+            elseif key == "COMMENT" then table.insert(retval.comments, values[1])
+            elseif key == "ENDFONT" then return retval
+            elseif key == "STARTCHAR" then 
+                mode = 3
+                charname = values[1]
+            elseif key == "STARTPROPERTIES" then mode = 2 end
+        elseif mode == 2 then
+            if propertymap[key] ~= nil then retval[propertymap[key]] = values[1]
+            elseif key == "RESOLUTION_X" then retval.resolution.x = values[1]
+            elseif key == "RESOLUTION_Y" then retval.resolution.y = values[1]
+            elseif key == "CHARSET_REGISTRY" then retval.charset.registry = values[1]
+            elseif key == "CHARSET_ENCODING" then retval.charset.encoding = values[1]
+            elseif key == "FONTNAME_REGISTRY" then retval.charset.fontname_registry = values[1]
+            elseif key == "CHARSET_COLLECTIONS" then retval.charset.collections = string_split_word(values[1])
+            elseif key == "SUPERSCRIPT_X" then retval.superscript.x = values[1]
+            elseif key == "SUPERSCRIPT_Y" then retval.superscript.y = values[1]
+            elseif key == "SUPERSCRIPT_SIZE" then retval.superscript.size = values[1]
+            elseif key == "SUBSCRIPT_X" then retval.subscript.x = values[1]
+            elseif key == "SUBSCRIPT_Y" then retval.subscript.y = values[1]
+            elseif key == "SUBSCRIPT_SIZE" then retval.subscript.size = values[1]
+            elseif key == "ENDPROPERTIES" then mode = 1 end
+        elseif mode == 3 then
+            if ch ~= nil then
+                if charname ~= nil then
+                    retval.chars[ch].name = charname
+                    charname = nil
+                end
+                if key == "SWIDTH" then retval.chars[ch].scalable_width = {x = values[1], y = values[2]}
+                elseif key == "DWIDTH" then retval.chars[ch].device_width = {x = values[1], y = values[2]}
+                elseif key == "BBX" then 
+                    retval.chars[ch].bounds = {x = values[3], y = values[4], width = values[1], height = values[2]}
+                    retval.chars[ch].bitmap = {}
+                    for y = 1, values[2] do retval.chars[ch].bitmap[y] = {} end
+                elseif key == "BITMAP" then 
+                    mode = 4 
+                end
+            elseif key == "ENCODING" then 
+                ch = string.char(values[1]) 
+                retval.chars[ch] = {}
+            end
+        elseif mode == 4 then
+            if key == "ENDCHAR" then 
+                ch = nil
+                chl = 1
+                mode = 1 
+            else
+                local num = tonumber("0x" .. key)
+                --if type(num) ~= "number" then print("Bad number: 0x" .. num) end
+                local l = {}
+                local w = math.ceil(math.floor(math.log(num) / math.log(2)) / 8) * 8
+                for i = ffs(num) or 0, w do l[w-i+1] = bit.band(bit.brshift(num, i-1), 1) == 1 end
+                retval.chars[ch].bitmap[chl] = l
+                chl = chl + 1
+            end
+        end
+    end
+    return retval
+end
 
 local function qs(tab)
     if (type(tab) ~= "table" and type(tab) ~= "function") or kernel or true then return tab end
@@ -21,6 +194,9 @@ Error = {
     BadValue = 2,
     BadWindow = 3,
     BadDrawable = 4,
+    BadName = 5,
+    BadFont = 6,
+    BadGC = 7,
 }
 
 StackMode = {
@@ -84,240 +260,11 @@ Fill = {
     Stippled = 3
 }
 
---- Opens a display for a program to use.
--- @param id The id of the monitor (either a string, or a number: 0 = native terminal, >0 = monitor id + 1 ("monitor_1" = 2))
--- @return An object describing the display or nil
-function CCWinX.OpenDisplay(client, id)
-    if displays[id] ~= nil then 
-        for k,v in pairs(retval.clients) do if v == client then
-            log:warn("Already opened display: " .. id)
-            return displays[id]
-        end end
-        table.insert(displays[id].clients, client)
-        return displays[id] 
-    end
-    local retval = {}
-    retval.id = id
-    retval.server = _PID
-    retval.clients = {client}
-    retval.windows = {}
-
-    if type(id) == "string" and peripheral.getType(id) == "monitor" then
-        local t = peripheral.wrap(id)
-        setmetatable(retval, {__index = function(tab, key) return t[key] end})
-    elseif type(id) == "number" and id == 0 then
-        local native = term.native()
-        setmetatable(retval, {__index = function(tab, key) return native[key] end})
-    elseif type(id) == "number" and peripheral.isPresent("monitor_" .. (id + 1)) then
-        local t = peripheral.wrap("monitor_" .. (id + 1))
-        setmetatable(retval, {__index = function(tab, key) return t[key] end})
-    else
-        log:error("Cannot open display: " .. id)
-        return nil
-    end
-    retval.setGraphicsMode(true)
-    local w, h = retval.getSize()
-    
-    local root = {}
-    root.owner = client
-    root.display = retval
-    root.frame = {}
-    root.frame.x = 0
-    root.frame.y = 0
-    root.frame.width = w * 6
-    root.frame.height = h * 9
-    root.class = 1 -- may use later
-    root.default_color = 0
-    root.attributes = {}
-    root.border = {}
-    root.border.width = 0
-    root.border.color = 0
-    root.buffer = {}
-    root.children = {}
-    function root.clear()
-        for y = 1, root.frame.height do
-            root.buffer[y] = {}
-            for x = 1, root.frame.width do
-                root.buffer[y][x] = root.default_color
-            end
-        end
-    end
-    function root.setPixel(x, y, c) root.buffer[y][x] = c end
-    function root.getPixel(x, y) return root.buffer[y][x] end
-    function root.drawPixel(x, y, c) retval.setPixel(x, y, c) end
-    function root.draw()
-        for y,r in pairs(root.buffer) do for x,c in pairs(r) do 
-            retval.setPixel(root.frame.x + x - 1, root.frame.y + y - 1, c > 0 and c or retval.getPixel(root.frame.x + x - 1, root.frame.y + y - 1)) 
-        end end
-    end
-    root.clear()
-    root.draw()
-    retval.root = root
-
-    displays[id] = retval
-    return retval
-end
-
---- Closes a display object and the windows associated with it.
--- @param disp The display object
--- @return Whether the command succeeded
-function CCWinX.CloseDisplay(client, disp)
-    if type(disp) ~= "table" then
-        log:error("Type error at CloseDisplay (#1): expected table, got " .. type(disp))
-        return false
-    end
-    local opened = false
-    for k,v in pairs(disp.clients) do if v == client then
-        opened = true
-        table.remove(disp.clients, k)
-        break
-    end end
-    if not opened then
-        log:error("Display not opened: " .. disp.id)
-        return false
-    end
-    local delete = {}
-    for k,v in pairs(disp.windows) do if v.owner == client then table.insert(delete, k) end end
-    for k,v in pairs(delete) do
-        CCWinX.DestroyWindow(disp.windows[v])
-        disp.windows[v] = nil
-    end
-    if #disp.clients == 0 then
-        term.setGraphicsMode(false)
-        disp.clear()
-        disp.setCursorPos(1, 1)
-        disp.setCursorBlink(true)
-        disp.setBackgroundColor(colors.black)
-        disp.setTextColor(colors.white)
-        displays[id] = nil
-        disp = nil
-    end
-    return true
-end
-
---- Creates a window.
--- @param display The display to create the window on
--- @param parent The parent window of the new window
--- @param x The X coordinate of the window
--- @param y The Y coordinate of the window
--- @param width The width of the window
--- @param height The height of the window
--- @param border_width The width of the window border
--- @param class The class of the window
--- @param attributes A table of attributes applied to the window.
--- @return A window object
-function CCWinX.CreateWindow(client, display, parent, x, y, width, height, border_width, class, attributes)
-    if x + width > parent.frame.width or y + height > parent.frame.height then
-        return Error.BadValue
-    end
-    if type(parent) ~= nil 
-        or parent.default_color == nil 
-        or parent.border == nil 
-        or parent.border.color == nil 
-        or parent.setPixel == nil 
-        or parent.children == nil then
-        return Error.BadWindow
-    end
-    local retval = {}
-    retval.owner = client
-    retval.display = display
-    retval.parent = parent
-    retval.frame = {}
-    retval.frame.x = x
-    retval.frame.y = y
-    retval.frame.width = width
-    retval.frame.height = height
-    retval.class = class or parent.class -- may use later
-    retval.attributes = attributes or {}
-    retval.default_color = parent.default_color
-    retval.border = {}
-    retval.border.width = border_width
-    retval.border.color = parent.border.color
-    retval.buffer = {}
-    retval.children = {}
-    function retval.clear()
-        for y = 1, retval.frame.height do
-            retval.buffer[y] = {}
-            for x = 1, retval.frame.width do
-                retval.buffer[y][x] = retval.default_color
-            end
-        end
-    end
-    function retval.setPixel(x, y, c) retval.buffer[y][x] = c end
-    function retval.getPixel(x, y) return retval.buffer[y][x] end
-    function retval.drawPixel(x, y, c) parent.drawPixel(x, y, c) end
-    function retval.draw()
-        for y,r in pairs(retval.buffer) do for x,c in pairs(r) do 
-            parent.setPixel(retval.frame.x + x - 1, retval.frame.y + y - 1, c > 0 and c or parent.getPixel(retval.frame.x + x, retval.frame.y + y)) 
-        end end
-    end
-    retval.clear()
-    table.insert(parent.children, 1, retval)
-    sendEvent("CreateNotify", client, false, display, parent, retval, x, y, width, height, border_width, retval.attributes.override_redirect)
-    return retval
-end
-
---- Creates a simple window.
--- @param display The display to create the window on
--- @param parent The parent window of the new window
--- @param x The X coordinate of the window
--- @param y The Y coordinate of the window
--- @param width The width of the window
--- @param height The height of the window
--- @param border_width The width of the window border
--- @param border The color of the border
--- @param background The color of the background
--- @return A window object
-function CCWinX.CreateSimpleWindow(client, display, parent, x, y, width, height, border_width, border, background)
-    if type(parent) ~= "table" 
-        or parent.default_color == nil 
-        or parent.border == nil 
-        or parent.border.color == nil 
-        or parent.setPixel == nil 
-        or parent.children == nil then
-        return Error.BadWindow
-    end
-    if x + width > parent.frame.width or y + height > parent.frame.height then
-        return Error.BadValue
-    end
-    local retval = {}
-    retval.owner = client
-    retval.display = display
-    retval.parent = parent
-    retval.frame = {}
-    retval.frame.x = x
-    retval.frame.y = y
-    retval.frame.width = width
-    retval.frame.height = height
-    retval.class = 1 -- may use later
-    retval.attributes = {}
-    retval.default_color = background
-    retval.border = {}
-    retval.border.width = border_width
-    retval.border.color = border
-    retval.buffer = {}
-    retval.children = {}
-    function retval.clear()
-        for y = 1, retval.frame.height do
-            retval.buffer[y] = {}
-            for x = 1, retval.frame.width do
-                retval.buffer[y][x] = retval.default_color
-            end
-        end
-    end
-    function retval.setPixel(x, y, c) retval.buffer[y][x] = c end
-    function retval.getPixel(x, y) return retval.buffer[y][x] end
-    function retval.drawPixel(x, y, c) parent.drawPixel(x, y, c) end
-    function retval.draw()
-        for y,r in pairs(retval.buffer) do for x,c in pairs(r) do 
-            parent.drawPixel(retval.frame.x + x - 1, retval.frame.y + y - 1, c > 0 and c or parent.getPixel(retval.frame.x + x, retval.frame.y + y)) 
-        end end
-    end
-    retval.clear()
-    table.insert(parent.children, 1, retval)
-    sendEvent("CreateNotify", client, false, qs(display), qs(parent), qs(retval), x, y, width, height, border_width, retval.attributes.override_redirect)
-    return retval
-end
+--- Changes the properties of a graphics context.
+-- @param display The display to use
+-- @param gc The graphics context to modify
+-- @param values The new values
+function CCWinX.ChangeGC(client, display, gc, values) for k,v in pairs(values) do gc[k] = v end end
 
 --- Changes the attributes of a window.
 -- @param display The display for the window
@@ -376,6 +323,43 @@ end
 function CCWinX.ClearWindow(client, display, w)
     if type(w) ~= "table" or w.clear == nil or w.buffer == nil then return Error.BadWindow end
     w.clear()
+end
+
+--- Closes a display object and the windows associated with it.
+-- @param disp The display object
+-- @return Whether the command succeeded
+function CCWinX.CloseDisplay(client, disp)
+    if type(disp) ~= "table" then
+        log:error("Type error at CloseDisplay (#1): expected table, got " .. type(disp))
+        return false
+    end
+    local opened = false
+    for k,v in pairs(disp.clients) do if v == client then
+        opened = true
+        table.remove(disp.clients, k)
+        break
+    end end
+    if not opened then
+        log:error("Display not opened: " .. disp.id)
+        return false
+    end
+    local delete = {}
+    for k,v in pairs(disp.windows) do if v.owner == client then table.insert(delete, k) end end
+    for k,v in pairs(delete) do
+        CCWinX.DestroyWindow(disp.windows[v])
+        disp.windows[v] = nil
+    end
+    if #disp.clients == 0 then
+        term.setGraphicsMode(false)
+        disp.clear()
+        disp.setCursorPos(1, 1)
+        disp.setCursorBlink(true)
+        disp.setBackgroundColor(colors.black)
+        disp.setTextColor(colors.white)
+        displays[id] = nil
+        disp = nil
+    end
+    return true
 end
 
 --- Changes a window's size, position, border, and stacking order.
@@ -575,6 +559,12 @@ function CCWinX.CopyArea(client, display, src, dest, gc, src_x, src_y, width, he
     end end
 end
 
+--- Copies a graphics context.
+-- @param display The display to use
+-- @param src The source graphics context
+-- @param dest The destination graphics context
+function CCWinX.CopyGC(client, display, src, dest) for k,v in pairs(src) do dest[k] = v end end
+
 --- Creates a new colormap.
 -- @param display The display to use
 -- @return The new colormap
@@ -607,6 +597,7 @@ function CCWinX.CreateGC(client, display, d, values)
         fill_style = Fill.Solid,
         fill_rule = false,
         arc_mode = false,
+        font = 1,
         subwindow_mode = false,
         graphics_exposures = True,
         dash_offset = 0,
@@ -628,6 +619,7 @@ function CCWinX.CreatePixmap(client, display, d, width, height)
     retval.client = client
     retval.display = display
     retval.parent = d
+    retval.default_color = d.default_color
     retval.frame = {}
     retval.frame.x = 0
     retval.frame.y = 0
@@ -645,6 +637,130 @@ function CCWinX.CreatePixmap(client, display, d, width, height)
     function retval.setPixel(x, y, c) retval.buffer[y][x] = c end
     function retval.getPixel(x, y) return retval.buffer[y][x] end
     retval.clear()
+    return retval
+end
+
+--- Creates a simple window.
+-- @param display The display to create the window on
+-- @param parent The parent window of the new window
+-- @param x The X coordinate of the window
+-- @param y The Y coordinate of the window
+-- @param width The width of the window
+-- @param height The height of the window
+-- @param border_width The width of the window border
+-- @param border The color of the border
+-- @param background The color of the background
+-- @return A window object
+function CCWinX.CreateSimpleWindow(client, display, parent, x, y, width, height, border_width, border, background)
+    if type(parent) ~= "table" 
+        or parent.default_color == nil 
+        or parent.border == nil 
+        or parent.border.color == nil 
+        or parent.setPixel == nil 
+        or parent.children == nil then
+        return Error.BadWindow
+    end
+    if x + width > parent.frame.width or y + height > parent.frame.height then
+        return Error.BadValue
+    end
+    local retval = {}
+    retval.owner = client
+    retval.display = display
+    retval.parent = parent
+    retval.frame = {}
+    retval.frame.x = x
+    retval.frame.y = y
+    retval.frame.width = width
+    retval.frame.height = height
+    retval.class = 1 -- may use later
+    retval.attributes = {}
+    retval.default_color = background
+    retval.border = {}
+    retval.border.width = border_width
+    retval.border.color = border
+    retval.buffer = {}
+    retval.children = {}
+    function retval.clear()
+        for y = 1, retval.frame.height do
+            retval.buffer[y] = {}
+            for x = 1, retval.frame.width do
+                retval.buffer[y][x] = retval.default_color
+            end
+        end
+    end
+    function retval.setPixel(x, y, c) retval.buffer[y][x] = c end
+    function retval.getPixel(x, y) return retval.buffer[y][x] end
+    function retval.drawPixel(x, y, c) parent.drawPixel(x, y, c) end
+    function retval.draw()
+        for y,r in pairs(retval.buffer) do for x,c in pairs(r) do 
+            parent.drawPixel(retval.frame.x + x - 1, retval.frame.y + y - 1, c > 0 and c or parent.getPixel(retval.frame.x + x, retval.frame.y + y)) 
+        end end
+    end
+    retval.clear()
+    table.insert(parent.children, 1, retval)
+    sendEvent("CreateNotify", client, false, qs(display), qs(parent), qs(retval), x, y, width, height, border_width, retval.attributes.override_redirect)
+    return retval
+end
+
+--- Creates a window.
+-- @param display The display to create the window on
+-- @param parent The parent window of the new window
+-- @param x The X coordinate of the window
+-- @param y The Y coordinate of the window
+-- @param width The width of the window
+-- @param height The height of the window
+-- @param border_width The width of the window border
+-- @param class The class of the window
+-- @param attributes A table of attributes applied to the window.
+-- @return A window object
+function CCWinX.CreateWindow(client, display, parent, x, y, width, height, border_width, class, attributes)
+    if x + width > parent.frame.width or y + height > parent.frame.height then
+        return Error.BadValue
+    end
+    if type(parent) ~= nil 
+        or parent.default_color == nil 
+        or parent.border == nil 
+        or parent.border.color == nil 
+        or parent.setPixel == nil 
+        or parent.children == nil then
+        return Error.BadWindow
+    end
+    local retval = {}
+    retval.owner = client
+    retval.display = display
+    retval.parent = parent
+    retval.frame = {}
+    retval.frame.x = x
+    retval.frame.y = y
+    retval.frame.width = width
+    retval.frame.height = height
+    retval.class = class or parent.class -- may use later
+    retval.attributes = attributes or {}
+    retval.default_color = parent.default_color
+    retval.border = {}
+    retval.border.width = border_width
+    retval.border.color = parent.border.color
+    retval.buffer = {}
+    retval.children = {}
+    function retval.clear()
+        for y = 1, retval.frame.height do
+            retval.buffer[y] = {}
+            for x = 1, retval.frame.width do
+                retval.buffer[y][x] = retval.default_color
+            end
+        end
+    end
+    function retval.setPixel(x, y, c) retval.buffer[y][x] = c end
+    function retval.getPixel(x, y) return retval.buffer[y][x] end
+    function retval.drawPixel(x, y, c) parent.drawPixel(x, y, c) end
+    function retval.draw()
+        for y,r in pairs(retval.buffer) do for x,c in pairs(r) do 
+            parent.setPixel(retval.frame.x + x - 1, retval.frame.y + y - 1, c > 0 and c or parent.getPixel(retval.frame.x + x, retval.frame.y + y)) 
+        end end
+    end
+    retval.clear()
+    table.insert(parent.children, 1, retval)
+    sendEvent("CreateNotify", client, false, display, parent, retval, x, y, width, height, border_width, retval.attributes.override_redirect)
     return retval
 end
 
@@ -726,15 +842,46 @@ function CCWinX.DisplayWidth(client, display) return display.root and display.ro
 -- @return The height of the display
 function CCWinX.DisplayHeight(client, display) return display.root and display.root.frame.height end
 
---- Draws a polygon or curve from a list of vertices.
+--- Draws a polygon or curve from a list of vertices. (WIP)
 -- @param display The display to use
 -- @param d The object to draw on
 -- @param gc The graphics context to use
 -- @param vlist The list of vertices (vertex = table {x, y, flags})
-
 function CCWinX.Draw(client, display, d, vlist)
     if type(d) ~= "table" or type(vlist) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
-
+    local lastx, lasty = 0, 0
+    local lastv = table.remove(vlist, 1)
+    for _,v in pairs(vlist) do
+        local function rel(a, b) return bit.band(v.flags, Vertex.Relative) > 0 and a + b or a end 
+        local l
+        if bit.band(vlist.flags, Vertex.DontDraw) == 0 then
+            if bit.band(vlist.flags, Vertex.Curved) > 0 then
+                local angle1 = 0
+                if bit.band(v.flags, Vertex.Relative) > 0 then
+                    if v.x > 0 and v.y > 0 then angle1 = 90
+                    elseif v.x > 0 and v.y < 0 then angle1 = 0
+                    elseif v.x < 0 and v.y > 0 then angle1 = 180
+                    elseif v.x < 0 and v.y < 0 then angle1 = 270 end
+                else
+                    if v.x - lastv.x > 0 and v.y - lastv.y > 0 then angle1 = 90
+                    elseif v.x - lastv.x > 0 and v.y - lastv.y < 0 then angle1 = 0
+                    elseif v.x - lastv.x < 0 and v.y - lastv.y > 0 then angle1 = 180
+                    elseif v.x - lastv.x < 0 and v.y - lastv.y < 0 then angle1 = 270 end
+                end
+                l = CCWinX.DrawArc(client, display, d, gc, 
+                    rel(lastv.x, lastx) - (rel(v.x, lastv.x) - rel(lastv.x, lastx)),
+                    rel(lastv.y, lasty) - (rel(v.y, lastv.y) - rel(lastv.y, lasty)), 
+                    rel(v.x, lastv.x) - rel(lastv.x, lastx), 
+                    rel(v.y, lastv.y) - rel(lastv.y, lasty),
+                    angle1, 90)
+            else
+                l = CCWinX.DrawLine(client, display, d, gc, rel(lastv.x, lastx), rel(lastv.y, lasty), rel(v.x, lastv.x), rel(v.y, lastv.y))
+            end
+        end
+        if l then return l end
+        lastx, lasty = lastv.x, lastv.y
+        lastv = v
+    end
 end
 
 local function circle_func(w, h, x)
@@ -757,6 +904,7 @@ end
 function CCWinX.DrawArc(client, display, d, gc, x, y, width, height, angle1, angle2)
     if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
     if x + width > d.frame.width or y + height > d.frame.height then return Error.BadMatch end
+    if type(gc) ~= "table" or gc.foreground == nil then return Error.BadGC end
     if angle2 >= 360 then angle2 = 359.99999999999 end
     local ly1 = height / 2
     local ly2 = height / 2
@@ -791,6 +939,21 @@ function CCWinX.DrawArcs(client, display, d, gc, arcs)
     end
 end
 
+--- Draws a string using the background and foreground.
+-- @param display The display to use
+-- @param d The object to draw on
+-- @param gc The graphics context to use
+-- @param x The X coordinate of the text
+-- @param y The Y coordinate of the text
+-- @param text The text to write
+function CCWinX.DrawImageString(client, display, d, gc, x, y, text)
+    if type(gc) ~= "table" or gc.font == nil then return Error.BadGC end
+    local err, ascent, descent, overall = CCWinX.QueryTextExtents(client, display, gc.font, text)
+    if type(err) == "number" then return err end
+    CCWinX.FillRectangle(client, display, d, {foreground = gc.background}, x, y - descent, overall.width, ascent - descent)
+    CCWinX.DrawString(client, display, d, gc, x, y, text)
+end
+
 --- Draws a single line.
 -- @param display The display to use
 -- @param d The object to draw on
@@ -802,13 +965,14 @@ end
 function CCWinX.DrawLine(client, display, d, gc, x1, y1, x2, y2)
     if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
     if x1 > d.frame.width or x2 > d.frame.width or y1 > d.frame.height or y2 > d.frame.height then return Error.BadMatch end
+    if type(gc) ~= "table" or gc.foreground == nil or gc.line_style == nil or gc.dashes == nil then return Error.BadGC end
     local dx = x2 - x1
     local dy = y2 - y1
     local de = math.abs(dy / dx)
     local e = 0
     local y = y1
     for x = x1, x2 do
-        d.setPixel(x, y, gc.foreground)
+        if (gc.line_style == Line.OnOffDash and (x - x1) % (gc.dashes[1] + gc.dashes[2]) > gc.dashes[1]) or gc.line_style == Line.Solid then d.setPixel(x, y, gc.foreground) end
         e = e + de
         if e >= 0.5 then
             y = y + (dy < 0 and -1 or 1) * 1
@@ -838,6 +1002,7 @@ end
 function CCWinX.DrawPoint(client, display, d, gc, x, y)
     if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
     if x > d.frame.width or y > d.frame.height then return Error.BadMatch end
+    if type(gc) ~= "table" or gc.foreground == nil then return Error.BadGC end
     d.setPixel(x, y, gc.foreground)
 end
 
@@ -864,6 +1029,7 @@ end
 function CCWinX.DrawRectangle(client, display, d, gc, x, y, width, height)
     if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
     if x + width > d.frame.width or y + height > d.frame.height then return Error.BadMatch end
+    if type(gc) ~= "table" or gc.foreground == nil then return Error.BadGC end
     return CCWinX.DrawLines(client, display, d, gc, {
         {x1 = x, y1 = y, x2 = x + width, y2 = y},
         {x1 = x + width, y1 = y, x2 = x + width, y2 = y + height},
@@ -884,6 +1050,197 @@ function CCWinX.DrawRectangles(client, display, d, gc, rectangles)
     end
 end
 
+--- Draws a string.
+-- @param display The display to use
+-- @param d The object to draw on
+-- @param gc The graphics context to use
+-- @param x The X coordinate of the text
+-- @param y The Y coordinate of the text
+-- @param text The text to draw
+function CCWinX.DrawString(client, display, d, gc, x, y, text)
+    if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
+    if type(gc) ~= "table" or gc.foreground == nil or gc.font == nil then return Error.BadGC end
+    if fonts[gc.font] == nil then return Error.BadFont end
+    local err, ascent, descent, overall = CCWinX.QueryTextExtents(client, display, gc.font, text)
+    for c in string.gmatch(text, ".") do
+        local fc = fonts[gc.font].chars[c]
+        if x + fc.bounds.width + fc.bounds.x > d.frame.width or y + fc.bounds.height + fc.bounds.y > d.frame.height then return Error.BadMatch end
+        for py = 1, fc.bounds.height do for px = 1, fc.bounds.width do if fc.bitmap[py][px] then 
+            d.setPixel(x + px + fc.bounds.x, y + py - fc.bounds.y - fc.bounds.height + ascent - descent, gc.foreground) 
+        end end end
+        x = x + fc.device_width.x
+    end
+end
+
+--- Draws a list of strings.
+-- @param display The display to use
+-- @param d The object to draw on
+-- @param gc The graphics context to use
+-- @param x The initial X coordinate
+-- @param y The initial Y coordinate
+-- @param items The text items to write
+function CCWinX.DrawText(client, display, d, gc, x, y, items)
+    local newgc = CCWinX.CreateGC(client, display, d, gc)
+    if type(newgc) == "number" then return newgc end
+    for _,item in pairs(items) do
+        if item.font ~= nil then newgc.font = item.font end
+        x = x + item.delta
+        local r = CCWinX.DrawString(client, display, d, newgc, x, y, item.chars)
+        if r then return r end
+    end
+end
+
+--- Fills a rectangle.
+-- @param display The display to use
+-- @param d The object to draw on
+-- @param gc The graphics context to use
+-- @param x The X coordinate of the rectangle
+-- @param y The Y coordinate of the rectangle
+-- @param width The width of the rectangle
+-- @param height The height of the rectangle
+function CCWinX.FillRectangle(client, display, d, gc, x, y, width, height)
+    if type(gc) ~= "table" or gc.foreground == nil then return Error.BadGC end
+    if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
+    if x + width > d.frame.width or y + height > d.frame.height then return Error.BadMatch end
+    for py = y, y + height do for px = x, x + width do d.setPixel(px, py, gc.foreground) end end
+end
+
+--- Loads a font into memory.
+-- @param display The display to use
+-- @param name The name of the font
+-- @return A font ID that can be used with QueryFont
+function CCWinX.LoadFont(client, display, name)
+    for _,font_dir in pairs(font_dirs) do
+        for _,path in pairs(fs.list(font_dir)) do
+            local file = fs.open(font_dir .. "/" .. path, "r")
+            local font = readBDFFont(file.readAll())
+            file.close()
+            if font ~= nil and string.find(font.id, string.gsub(string.gsub(string.gsub(name, "-", "%%-"), "?", "."), "*", ".*"), 1, false) then
+                local id = #fonts + 1
+                fonts[id] = font
+                return id
+            end
+        end
+    end
+    return nil
+end
+
+--- Loads and returns a font.
+-- @param display The display to use
+-- @param name The name of the font
+-- @return A font table
+function CCWinX.LoadQueryFont(client, display, name) return fonts[CCWinX.LoadFont(client, display, name) or -1] end
+
+--- Opens a display for a program to use.
+-- @param id The id of the monitor (either a string, or a number: 0 = native terminal, >0 = monitor id + 1 ("monitor_1" = 2))
+-- @return An object describing the display or nil
+function CCWinX.OpenDisplay(client, id)
+    if displays[id] ~= nil then 
+        for k,v in pairs(retval.clients) do if v == client then
+            log:warn("Already opened display: " .. id)
+            return displays[id]
+        end end
+        table.insert(displays[id].clients, client)
+        return displays[id] 
+    end
+    local retval = {}
+    retval.id = id
+    retval.server = _PID
+    retval.clients = {client}
+    retval.windows = {}
+
+    if type(id) == "string" and peripheral.getType(id) == "monitor" then
+        local t = peripheral.wrap(id)
+        setmetatable(retval, {__index = function(tab, key) return t[key] end})
+    elseif type(id) == "number" and id == 0 then
+        local native = term.native()
+        setmetatable(retval, {__index = function(tab, key) return native[key] end})
+    elseif type(id) == "number" and peripheral.isPresent("monitor_" .. (id + 1)) then
+        local t = peripheral.wrap("monitor_" .. (id + 1))
+        setmetatable(retval, {__index = function(tab, key) return t[key] end})
+    else
+        log:error("Cannot open display: " .. id)
+        return nil
+    end
+    retval.setGraphicsMode(true)
+    local w, h = retval.getSize()
+    
+    local root = {}
+    root.owner = client
+    root.display = retval
+    root.frame = {}
+    root.frame.x = 0
+    root.frame.y = 0
+    root.frame.width = w * 6
+    root.frame.height = h * 9
+    root.class = 1 -- may use later
+    root.default_color = 0
+    root.attributes = {}
+    root.border = {}
+    root.border.width = 0
+    root.border.color = 0
+    root.buffer = {}
+    root.children = {}
+    function root.clear()
+        for y = 1, root.frame.height do
+            root.buffer[y] = {}
+            for x = 1, root.frame.width do
+                root.buffer[y][x] = root.default_color
+            end
+        end
+    end
+    function root.setPixel(x, y, c) root.buffer[y][x] = c end
+    function root.getPixel(x, y) return root.buffer[y][x] end
+    function root.drawPixel(x, y, c) retval.setPixel(x, y, c) end
+    function root.draw()
+        for y,r in pairs(root.buffer) do for x,c in pairs(r) do 
+            retval.setPixel(root.frame.x + x - 1, root.frame.y + y - 1, c > 0 and c or retval.getPixel(root.frame.x + x - 1, root.frame.y + y - 1)) 
+        end end
+    end
+    root.clear()
+    root.draw()
+    retval.root = root
+
+    displays[id] = retval
+    return retval
+end
+
+--- Returns a font that's been loaded with LoadFont.
+-- @param display The display to use
+-- @param font_ID The ID of the font
+-- @return A font table
+function CCWinX.QueryFont(client, display, font_ID) return fonts[font_ID] end
+
+--- Returns the extents of a string with a font.
+-- @param display The display to use
+-- @param font_ID The ID of the font to use
+-- @param text The string to check
+-- @return The direction (LTR = true), ascent, descent, and overall size table
+function CCWinX.QueryTextExtents(client, display, font_ID, text)
+    if fonts[font_ID] == nil then return Error.BadFont end
+    local direction = fonts[font_ID].slant ~= "R"
+    local overall = {lbearing = 0, rbearing = 0, width = 0, ascent = 0, descent = 0}
+    for c in string.gmatch(text, ".") do
+        local fch = fonts[font_ID].chars[c]
+        overall.ascent = math.max(overall.ascent, fch.bounds.y + fch.bounds.height)
+        overall.descent = math.min(overall.descent, fch.bounds.y)
+        overall.lbearing = math.min(overall.lbearing, fch.bounds.x + overall.width)
+        overall.rbearing = math.max(overall.rbearing, fch.bounds.x + fch.bounds.width + overall.width)
+        overall.width = overall.width + fch.device_width.x
+    end
+    return direction, overall.ascent, overall.descent, overall
+end
+
+--- Sets the directories to search for font files.
+-- @param display The display to use
+-- @param directories The directories to search
+function CCWinX.SetFontPath(client, display, directories) font_dirs = directories or {"CCWinX/fonts"} end
+
+--- Unloads a previously loaded font.
+-- @param display The display to use
+-- @param font The font to unload
+function CCWinX.UnloadFont(client, display, font) fonts[font] = nil end
+
 -- If run under CCKernel2 through a shell or forked: start a CCWinX server to listen to apps
 -- If loaded as an API under CCKernel2: provide functions to send messages to a CCWinX server
 -- If run without CCKernel2 through a shell: do nothing
@@ -898,6 +1255,9 @@ if shell or _FORK then
         log:open()
         log:info("CCWinX Server v0.0.1")
         log:info("Running " .. os.version() .. " on host " .. _HOST)
+        log:debug("Reading default font into memory")
+        local f = CCWinX.LoadFont(_PID, nil, "-ComputerCraft-CraftOS-Book-R-Mono--9-90-75-75-M-90-ISO8859-1")
+        if f == nil then log:error("Could not load default font") end
         while true do
             local args = {os.pullEvent()}
             local ev = table.remove(args, 1)
@@ -944,6 +1304,8 @@ else
             end
         end
     else
+        local f = CCWinX.LoadFont(0, nil, "-ComputerCraft-CraftOS-Book-R-Mono--9-90-75-75-M-90-ISO8859-1")
+        if f == nil then log:error("Could not load default font") end
         for k,v in pairs(CCWinX) do _ENV[k] = function(...) return CCWinX[k](0, ...) end end
     end
 end
