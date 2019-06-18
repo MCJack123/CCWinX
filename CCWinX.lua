@@ -649,7 +649,7 @@ function CCWinX.CloseDisplay(client, disp)
         disp.setCursorBlink(true)
         disp.setBackgroundColor(colors.black)
         disp.setTextColor(colors.white)
-        displays[id] = nil
+        displays[disp.id] = nil
         disp = nil
     end
     return true
@@ -896,7 +896,7 @@ function CCWinX.CreateGC(client, display, d, values)
         dash_offset = 0,
         dashes = {4, 4}
     }
-    for k,v in pairs(values) do retval[k] = v end
+    for k,v in pairs(values or {}) do retval[k] = v end
     return retval
 end
 
@@ -978,7 +978,7 @@ function CCWinX.CreateSimpleWindow(client, display, parent, x, y, width, height,
     end
     local retval = {}
     retval.owner = client
-    retval.display = display
+    --retval.display = display
     retval.parent = parent
     retval.frame = {}
     retval.frame.x = x
@@ -1003,11 +1003,13 @@ function CCWinX.CreateSimpleWindow(client, display, parent, x, y, width, height,
     end
     function retval.setPixel(x, y, c) retval.buffer[y][x] = c end
     function retval.getPixel(x, y) return retval.buffer[y][x] end
-    function retval.drawPixel(x, y, c) parent.drawPixel(x, y, c) end
+    function retval.drawPixel(x, y, c) parent.drawPixel(x, y, c == 0 and parent.getPixel(x, y) or c) end
     function retval.draw()
+        if not retval.display then return end
         for y,r in pairs(retval.buffer) do for x,c in pairs(r) do 
             parent.drawPixel(retval.frame.x + x - 1, retval.frame.y + y - 1, c > 0 and c or parent.getPixel(retval.frame.x + x, retval.frame.y + y)) 
         end end
+        for k,v in pairs(retval.children) do v.draw() end
     end
     retval.clear()
     table.insert(parent.children, 1, retval)
@@ -1030,7 +1032,7 @@ function CCWinX.CreateWindow(client, display, parent, x, y, width, height, borde
     if x + width > parent.frame.width or y + height > parent.frame.height then
         return Error.BadValue
     end
-    if type(parent) ~= nil 
+    if type(parent) ~= "table" 
         or parent.default_color == nil 
         or parent.border == nil 
         or parent.border.color == nil 
@@ -1040,7 +1042,7 @@ function CCWinX.CreateWindow(client, display, parent, x, y, width, height, borde
     end
     local retval = {}
     retval.owner = client
-    retval.display = display
+    --retval.display = display
     retval.parent = parent
     retval.frame = {}
     retval.frame.x = x
@@ -1065,11 +1067,13 @@ function CCWinX.CreateWindow(client, display, parent, x, y, width, height, borde
     end
     function retval.setPixel(x, y, c) retval.buffer[y][x] = c end
     function retval.getPixel(x, y) return retval.buffer[y][x] end
-    function retval.drawPixel(x, y, c) parent.drawPixel(x, y, c) end
+    function retval.drawPixel(x, y, c) parent.drawPixel(x, y, c == 0 and parent.getPixel(x, y) or c) end
     function retval.draw()
+        if not retval.display then return end
         for y,r in pairs(retval.buffer) do for x,c in pairs(r) do 
-            parent.setPixel(retval.frame.x + x - 1, retval.frame.y + y - 1, c > 0 and c or parent.getPixel(retval.frame.x + x, retval.frame.y + y)) 
+            parent.drawPixel(retval.frame.x + x - 1, retval.frame.y + y - 1, c > 0 and c or parent.getPixel(retval.frame.x + x, retval.frame.y + y)) 
         end end
+        for k,v in pairs(retval.children) do v.draw() end
     end
     retval.clear()
     table.insert(parent.children, 1, retval)
@@ -1425,10 +1429,14 @@ end
 -- @param rectangles The list of rectangles
 function CCWinX.FillRectangles(client, display, d, gc, rectangles)
     for k,v in pairs(rectangles) do
-        local r = CCWinX.DrawRectangle(client, display, d, gc, v.x, v.y, v.width, v.height)
+        local r = CCWinX.FillRectangle(client, display, d, gc, v.x, v.y, v.width, v.height)
         if r then return r end
     end
 end
+
+--- Redraws all windows on a display.
+-- @param display The display to redraw
+function CCWinX.Flush(client, display) display.root.draw() end
 
 --- Returns a property set on the display's database.
 -- @param display The display to use
@@ -1480,6 +1488,15 @@ end
 -- @return A font table
 function CCWinX.LoadQueryFont(client, display, name) return fonts[CCWinX.LoadFont(client, display, name) or -1] end
 
+--- Maps a window onto a display.
+-- @param display The display to map to
+-- @param w The window to map
+function CCWinX.MapWindow(client, display, w)
+    if type(w) ~= "table" then return Error.BadMatch end 
+    w["display"] = display 
+    w.draw()
+end
+
 --- Opens a display for a program to use.
 -- @param id The id of the monitor (either a string, or a number: 0 = native terminal, >0 = monitor id + 1 ("monitor_1" = 2))
 -- @return An object describing the display or nil
@@ -1523,7 +1540,7 @@ function CCWinX.OpenDisplay(client, id)
     root.frame.width = w * 6
     root.frame.height = h * 9
     root.class = 1 -- may use later
-    root.default_color = 0
+    root.default_color = colors.black
     root.attributes = {}
     root.border = {}
     root.border.width = 0
@@ -1540,11 +1557,12 @@ function CCWinX.OpenDisplay(client, id)
     end
     function root.setPixel(x, y, c) root.buffer[y][x] = c end
     function root.getPixel(x, y) return root.buffer[y][x] end
-    function root.drawPixel(x, y, c) retval.setPixel(x, y, c) end
+    function root.drawPixel(x, y, c) retval.setPixel(x, y, c == 0 and colors.black or c) end
     function root.draw()
         for y,r in pairs(root.buffer) do for x,c in pairs(r) do 
             retval.setPixel(root.frame.x + x - 1, root.frame.y + y - 1, c > 0 and c or retval.getPixel(root.frame.x + x - 1, root.frame.y + y - 1)) 
         end end
+        for k,v in pairs(root.children) do v.draw() end
     end
     root.clear()
     root.draw()
