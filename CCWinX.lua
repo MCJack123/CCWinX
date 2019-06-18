@@ -1,3 +1,8 @@
+--- CCWinX - An Xlib-compatible window manager for CraftOS-PC
+-- @release 0.0.1
+-- @author JackMacWindows
+-- @copyright Copyright 2019 JackMacWindows.
+
 local _FORK = _FORK
 if term.setGraphicsMode == nil then error("CCWinX requires CraftOS-PC v1.2 or later.") end
 _ = os.loadAPI("CCLog.lua") or (shell and os.loadAPI(fs.getDir(shell.getRunningProgram()) .. "/CCLog.lua")) or print("CCLog not installed, logging will be disabled.")
@@ -17,6 +22,8 @@ local CCWinX = {}
 local displays = {}
 fonts = {}
 local font_dirs = {"CCWinX/fonts"}
+local api_get_dir = nil
+local api_get_local = true
 
 -- BDF parser
 local function string_split(str, tok)
@@ -186,19 +193,298 @@ local function qs(tab)
     for k,v in pairs(tab) do retval[qs(k)] = qs(v) end
     return retval
 end
-local function sendEvent(...) if kernel then kernel.broadcast(...) else os.queueEvent(...) end end
 
+local function sendEvent(...) if kernel then kernel.broadcast(...) else os.queueEvent(...) end end
+local function retf(...) return ... end
+
+local function parseBitmap(data, width, height)
+    local retval = {}
+    local i = 1
+    local x = 1
+    if width * height / 2 > string.len(data) then return nil end
+    while i < width * height / 2 do
+        local y = math.floor(x / width) + 1
+        if retval[y] == nil then retval[y] = {} end
+        retval[y][x] = bit.blshift(1, bit.brshift(bit.band(string.byte(data, i), 0xF0), 4))
+        x = x + 1
+        y = math.floor(x / width) + 1
+        if retval[y] == nil then retval[y] = {} end
+        retval[y][x] = bit.blshift(1, bit.band(string.byte(data, i), 0x0F))
+        x = x + 1
+        i = i + 1
+    end
+    return retval, width, height
+end
+
+local function pcolor(p) return paintutils.parseImage(p)[1][1] end
+
+local function parseBLT(data, width, height)
+    local retval = {}
+    for y,text in pairs(data[1]) do
+        retval[y*3-2] = {}
+        retval[y*3-1] = {}
+        retval[y*3] = {}
+        for x,ch in string.gmatch(text, ".") do
+            ch = string.byte(ch)
+            if ch < 128 or ch > 159 then
+                retval[y*3-2][x*2-1] = 0
+                retval[y*3-1][x*2-1] = 0
+                retval[y*3][x*2-1] = 0
+                retval[y*3-2][x*2] = 0
+                retval[y*3-1][x*2] = 0
+                retval[y*3][x*2] = 0
+            else
+                retval[y*3-2][x*2-1] = bit.band(ch, 1) == 1 and pcolor(string.sub(data[2][y], x, x)) or pcolor(string.sub(data[3][y], x, x))
+                retval[y*3-2][x*2] = bit.band(ch, 2) == 1 and pcolor(string.sub(data[2][y], x, x)) or pcolor(string.sub(data[3][y], x, x))
+                retval[y*3-1][x*2-1] = bit.band(ch, 4) == 1 and pcolor(string.sub(data[2][y], x, x)) or pcolor(string.sub(data[3][y], x, x))
+                retval[y*3-1][x*2] = bit.band(ch, 8) == 1 and pcolor(string.sub(data[2][y], x, x)) or pcolor(string.sub(data[3][y], x, x))
+                retval[y*3][x*2-1] = bit.band(ch, 16) == 1 and pcolor(string.sub(data[2][y], x, x)) or pcolor(string.sub(data[3][y], x, x))
+                retval[y*3][x*2] = pcolor(string.sub(data[3][y], x, x))
+            end
+        end
+    end
+    return retval, data.width, data.height
+end
+
+local function parseCCG(data, width, height) --[[ TODO: fix this
+    local retval_r = {}
+    for y,text in pairs(data) do
+        retval[y*3-2] = {}
+        retval[y*3-1] = {}
+        retval[y*3] = {}
+        for x,c in string.gmatch(text, ".") do
+            ch = string.byte(c.pixelCode)
+            if c.useCharacter then
+                retval[y*3-2][x*2-1] = 0
+                retval[y*3-1][x*2-1] = 0
+                retval[y*3][x*2-1] = 0
+                retval[y*3-2][x*2] = 0
+                retval[y*3-1][x*2] = 0
+                retval[y*3][x*2] = 0
+            else
+                retval[y*3-2][x*2-1] = bit.band(ch, 1) == 1 and c.fgColor or c.bgColor
+                retval[y*3-2][x*2] = bit.band(ch, 2) == 1 and c.fgColor or c.bgColor
+                retval[y*3-1][x*2-1] = bit.band(ch, 4) == 1 and c.fgColor or c.bgColor
+                retval[y*3-1][x*2] = bit.band(ch, 8) == 1 and c.fgColor or c.bgColor
+                retval[y*3][x*2-1] = bit.band(ch, 16) == 1 and c.fgColor or c.bgColor
+                retval[y*3][x*2] = c.bgColor
+            end
+        end
+    end
+    return retval, data.]]
+end
+
+local function parseGIF(data, width, height)
+    if bbpack == nil then
+        log:debug("Attempting to load bbpack API")
+        os.loadAPI((api_get_dir or "") .. "bbpack")
+        if bbpack == nil then
+            if api_get_dir ~= nil then
+                local handle = http.get("http://pastebin.com/raw/cUYTGbpb")
+                if not handle then
+                    log:error("Error downloading bbpack")
+                    return nil
+                end
+                local file = fs.open(fs.combine(api_get_dir, "bbpack.lua"), "w")
+                file.write(handle.readAll())
+                file.close()
+                handle.close()
+                os.loadAPI(fs.combine(api_get_dir, "bbpack.lua"))
+            elseif api_get_local then
+                local handle = http.get("http://pastebin.com/raw/cUYTGbpb")
+                if not handle then
+                    log:error("Error downloading bbpack")
+                    return nil
+                end
+                local tEnv = {}
+                setmetatable( tEnv, { __index = _G } )
+                local fnAPI, err = load( handle.readAll(), "bbpack", nil, tEnv )
+                if fnAPI then
+                    local ok, err = pcall( fnAPI )
+                    if not ok then
+                        log:error( "Could not load bbpack: " .. err )
+                        return nil
+                    end
+                else
+                    log:error( "Could not load bbpack: " .. err )
+                    return nil
+                end
+                
+                local tAPI = {}
+                for k,v in pairs( tEnv ) do
+                    if k ~= "_ENV" then
+                        tAPI[k] =  v
+                    end
+                end
+
+                _G.bbpack = tAPI
+            else
+                log:error("Could not find bbpack API and downloading is disabled")
+                return nil
+            end
+        end
+    end
+    if GIF == nil then
+        log:debug("Attempting to load GIF API")
+        os.loadAPI((api_get_dir or "") .. "GIF")
+        if GIF == nil then
+            if api_get_dir ~= nil then
+                local handle = http.get("http://pastebin.com/raw/5uk9uRjC")
+                if not handle then
+                    log:error("Error downloading GIF")
+                    return nil
+                end
+                local file = fs.open(fs.combine(api_get_dir, "GIF.lua"), "w")
+                file.write(handle.readAll())
+                file.close()
+                handle.close()
+                os.loadAPI(fs.combine(api_get_dir, "GIF.lua"))
+            elseif api_get_local then
+                local handle = http.get("http://pastebin.com/raw/5uk9uRjC")
+                if not handle then
+                    log:error("Error downloading GIF")
+                    return nil
+                end
+                local tEnv = {}
+                setmetatable( tEnv, { __index = _G } )
+                local fnAPI, err = load( handle.readAll(), "GIF", nil, tEnv )
+                if fnAPI then
+                    local ok, err = pcall( fnAPI )
+                    if not ok then
+                        log:error( "Could not load GIF: " .. err )
+                        return nil
+                    end
+                else
+                    log:error( "Could not load GIF: " .. err )
+                    return nil
+                end
+                
+                local tAPI = {}
+                for k,v in pairs( tEnv ) do
+                    if k ~= "_ENV" then
+                        tAPI[k] =  v
+                    end
+                end
+
+                _G.GIF = tAPI
+            else
+                log:error("Could not find GIF API and downloading is disabled")
+                return nil
+            end
+        end
+    end
+    local img
+    if fs.exists(data) then img = GIF.loadGIF(data) else
+        local name = ".tmp_image_" .. string.gsub(tostring({}), "table: ", "")
+        local file = fs.open(name, "w")
+        file.write(data)
+        file.close()
+        img = GIF.loadGIF(name)
+        fs.delete(name)
+    end
+    local retval = {}
+    for y,r in pairs(img[1]) do if tonumber(y) ~= nil then
+        retval[y] = {}
+        local xoff = 0
+        for x,c in pairs(r) do if type(c) == "number" then xoff = xoff + c else retval[y][x+xoff] = pcolor(c) end end
+    end end
+    return retval, img.width, img.height
+end
+
+local function parseNFP(data, width, height)
+    local retval = paintutils.parseImage(data)
+    return retval, #retval[1], #retval
+end
+
+local function scaleNFP(data, width, height)
+    local img, w, h = paintutils.parseImage(data)
+    local retval = {}
+    for y,r in pairs(img) do 
+        retval[y*9-8] = {}
+        for x,c in pairs(r) do for i = 0, 5 do retval[y*9-8][x*6-i] = c end end 
+        for i = 0, 7 do retval[y*9-i] = retval[y*9-8] end
+    end
+    return retval, w*6, h*9
+end
+
+local function scaleBLT(data, width, height)
+    local img, w, h = parseBLT(data, width, height)
+    local retval = {}
+    for y,r in pairs(img) do 
+        retval[y*3-1] = {}
+        for x,c in pairs(r) do 
+            retval[y*3-1][x*2-1] = c 
+            retval[y*3-1][x*2] = c 
+        end
+        retval[y*3] = retval[y*3-1]
+    end
+    return retval, w*2, h*2
+end
+
+local function scaleCCG(data, width, height)
+    local img, w, h = parseCCG(data, width, height)
+    local retval = {}
+    for y,r in pairs(img) do 
+        retval[y*3-1] = {}
+        for x,c in pairs(r) do 
+            retval[y*3-1][x*2-1] = c 
+            retval[y*3-1][x*2] = c 
+        end
+        retval[y*3] = retval[y*3-1]
+    end
+    return retval, w*2, h*2
+end
+
+--- Error codes
 Error = {
-    BadColor = 0,
-    BadMatch = 1,
-    BadValue = 2,
-    BadWindow = 3,
-    BadDrawable = 4,
-    BadName = 5,
-    BadFont = 6,
-    BadGC = 7,
+    BadColor = 0, -- Invalid color
+    BadMatch = 1, -- Bad match
+    BadValue = 2, -- Bad value
+    BadWindow = 3, -- Invalid window
+    BadDrawable = 4, -- Invalid drawable
+    BadName = 5, -- Invalid name
+    BadFont = 6, -- Invalid font
+    BadGC = 7, -- Invalid gc
 }
 
+local ErrorStrings = {
+    [Error.BadColor] = "Invalid color",
+    [Error.BadMatch] = "Bad match",
+    [Error.BadValue] = "Bad value",
+    [Error.BadWindow] = "Invalid window",
+    [Error.BadDrawable] = "Invalid drawable",
+    [Error.BadName] = "Invalid name",
+    [Error.BadFont] = "Invalid font",
+    [Error.BadGC] = "Invalid graphics context"
+}
+
+--- Image formats
+-- @see CCWinX.CreateImage
+ImageFormat = {
+    Bitmap = 0, -- Bitmap image (1 byte = 2 pixels)
+    Pixmap = 1, -- Pixmap ([y][x] table)
+    NFP = 2, -- Native paint format (scaled)
+    BLT = 3, -- BLittle format (scaled)
+    GIF = 4, -- Graphics Interchange Format (can be filename)
+    CCG = 5, -- CCGraphics format (scaled)
+    UnscaledNFP = 6, -- Native paint format (unscaled)
+    UnscaledCCG = 7, -- CCGraphics format (unscaled)
+    UnscaledBLT = 8 -- BLittle format (unscaled)
+}
+
+local ImageFormatConverters = {
+    [ImageFormat.Bitmap] = parseBitmap,
+    [ImageFormat.Pixmap] = retf,
+    [ImageFormat.NFP] = scaleNFP,
+    [ImageFormat.BLT] = scaleBLT,
+    [ImageFormat.GIF] = parseGIF,
+    [ImageFormat.CCG] = scaleCCG,
+    [ImageFormat.UnscaledNFP] = parseNFP,
+    [ImageFormat.UnscaledCCG] = parseCCG,
+    [ImageFormat.UnscaledBLT] = parseBLT
+}
+
+--- Stacking mode
 StackMode = {
     Above = 0,
     Below = 1,
@@ -207,14 +493,17 @@ StackMode = {
     Opposite = 4
 }
 
+--- Vertex flags
+-- @see CCWinX.Draw
 Vertex = {
-    Relative = 0x01,
-    DontDraw = 0x02,
-    Curved = 0x04,
-    StartClosed = 0x08,
-    EndClosed = 0x10
+    Relative = 0x01, -- This vertex is relative to the last
+    DontDraw = 0x02, -- Don't draw this vertex
+    Curved = 0x04, -- This line is curved
+    StartClosed = 0x08, -- Start of a closed shape
+    EndClosed = 0x10 -- End of a closed shape
 }
 
+--- Copy methods
 GCFunc = {
     GXclear = 0,
     GXand = 1,
@@ -234,12 +523,14 @@ GCFunc = {
     GXset = 15
 }
 
+--- Line types
 Line = {
-    Solid = 0,
-    DoubleDash = 1,
-    OnOffDash = 2
+    Solid = 0, -- Solid line
+    DoubleDash = 1, -- Two-color dashed
+    OnOffDash = 2 -- Single-color dashed
 }
 
+--- Line endings
 Cap = {
     NotLast = 0,
     Butt = 1,
@@ -247,15 +538,17 @@ Cap = {
     Projecting = 3
 }
 
+--- Methods to join lines
 Join = {
     Miter = 0,
     Round = 1,
     Bevel = 2
 }
 
+--- Methods to fill areas
 Fill = {
-    Solid = 0,
-    Tiled = 1,
+    Solid = 0, -- Solid fill
+    Tiled = 1, -- Checkerboard fill
     OpaqueStippled = 2,
     Stippled = 3
 }
@@ -604,6 +897,26 @@ function CCWinX.CreateGC(client, display, d, values)
         dashes = {4, 4}
     }
     for k,v in pairs(values) do retval[k] = v end
+    return retval
+end
+
+--- Creates a new image from image data.
+-- @param display The display to use
+-- @param format The format of the image data
+-- @param offset The offset of the image data (string data only)
+-- @param data The image data
+-- @param width The width of the image
+-- @param height The height of the image
+-- @return A new image
+-- @note You can load in images in bitmap, GIF, and NFP format using a string as data, 
+--       and images in pixmap, BLittle, and CCGraphics format using a table as data. 
+--       By default NFP, BLittle, and CCGraphics images will be scaled up to native resolutions,
+--       use ImageFormat.Unscaled[NFP|BLT|CCG] to skip scaling.
+function CCWinX.CreateImage(client, display, format, offset, data, width, height)
+    local retval = {}
+    if type(data) == "string" and offset ~= nil then data = string.sub(data, offset) end
+    retval.data, retval.width, retval.height = ImageFormatConverters[format](data, width, height)
+    retval.format = format
     return retval
 end
 
@@ -1104,6 +1417,42 @@ function CCWinX.FillRectangle(client, display, d, gc, x, y, width, height)
     if x + width > d.frame.width or y + height > d.frame.height then return Error.BadMatch end
     for py = y, y + height do for px = x, x + width do d.setPixel(px, py, gc.foreground) end end
 end
+
+--- Fills a list of rectangles.
+-- @param display The display to use
+-- @param d The object to draw on
+-- @param gc The graphics context to use
+-- @param rectangles The list of rectangles
+function CCWinX.FillRectangles(client, display, d, gc, rectangles)
+    for k,v in pairs(rectangles) do
+        local r = CCWinX.DrawRectangle(client, display, d, gc, v.x, v.y, v.width, v.height)
+        if r then return r end
+    end
+end
+
+--- Returns a property set on the display's database.
+-- @param display The display to use
+-- @param program The name of the program
+-- @param option The option to get
+-- @return The property set, or nil
+function CCWinX.GetDefault(client, display, program, option)
+    if type(display) ~= "table" then return nil end
+    if display.database == nil then display.database = {} end
+    return display.database[program] and display.database[program][option]
+end
+
+--- Returns a string describing an error code.
+-- @param display The display to use
+-- @param code The code to check
+-- @return The string describing the code
+function CCWinX.GetErrorText(client, display, code) return ErrorStrings[code] end
+
+--- Returns a list of paths to scan for fonts.
+-- @param display The display to use
+-- @return A list of paths for fonts
+function CCWinX.GetFontPath() return font_dirs end
+
+
 
 --- Loads a font into memory.
 -- @param display The display to use
