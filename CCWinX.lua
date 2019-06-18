@@ -1474,6 +1474,7 @@ function CCWinX.LoadFont(client, display, name)
             file.close()
             if font ~= nil and string.find(font.id, string.gsub(string.gsub(string.gsub(name, "-", "%%-"), "?", "."), "*", ".*"), 1, false) then
                 local id = #fonts + 1
+                font.fid = id
                 fonts[id] = font
                 return id
             end
@@ -1582,7 +1583,10 @@ function CCWinX.QueryFont(client, display, font_ID) return fonts[font_ID] end
 -- @param display The display to use
 -- @param font_ID The ID of the font to use
 -- @param text The string to check
--- @return The direction (LTR = true), ascent, descent, and overall size table
+-- @return The direction (LTR = true)
+-- @return Ascent
+-- @return Descent
+-- @return Overall size table
 function CCWinX.QueryTextExtents(client, display, font_ID, text)
     if fonts[font_ID] == nil then return Error.BadFont end
     local direction = fonts[font_ID].slant ~= "R"
