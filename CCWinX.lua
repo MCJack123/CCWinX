@@ -20,8 +20,9 @@ local log = CCLog and (CCLog.CCLog and CCLog.CCLog("CCWinX") or CCLog("CCWinX"))
 
 local CCWinX = {}
 local displays = {}
-fonts = {}
+local fonts = {}
 local font_dirs = {"CCWinX/fonts"}
+local screensaver = {timeout = 900, interval = 0, prefer_blanking = true, allow_exposures = false}
 local api_get_dir = nil
 local api_get_local = true
 
@@ -445,6 +446,7 @@ Error = {
     BadName = 5, -- Invalid name
     BadFont = 6, -- Invalid font
     BadGC = 7, -- Invalid gc
+    BadImage = 8, -- Invalid image
 }
 
 local ErrorStrings = {
@@ -455,7 +457,8 @@ local ErrorStrings = {
     [Error.BadDrawable] = "Invalid drawable",
     [Error.BadName] = "Invalid name",
     [Error.BadFont] = "Invalid font",
-    [Error.BadGC] = "Invalid graphics context"
+    [Error.BadGC] = "Invalid graphics context",
+    [Error.BadImage] = "Invalid image"
 }
 
 --- Image formats
@@ -552,6 +555,31 @@ Fill = {
     OpaqueStippled = 2,
     Stippled = 3
 }
+
+--- Activates the screen saver.
+-- This function will block until a keyboard/mouse event occurs, run this in a coroutine to allow background processing.
+-- On CCKernel, the server *does* run this in a coroutine.
+-- @param display The display to suspend
+-- @param no_queue Set to true to not queue events while exposing (use in a coroutine)
+function CCWinX.ActivateScreenSaver(client, display, no_queue)
+    local w, h = display.getSize()
+    if screensaver.prefer_blanking then display.clear()
+    elseif screensaver.allow_exposures then
+        display.setPixel(math.random(0, w * 6 - 1), math.random(0, h * 9 - 1), bit.blshift(1, math.random(0, 15)))
+        if not no_queue then os.queueEvent("nosleep") end
+    end
+    while true do
+        local ev, p1 = os.pullEvent()
+        if ev == "key" or ev == "key_up" or string.find(ev, "mouse_") then break 
+        elseif ev == "ResetScreenSaver" and p1 == display.id then break end
+        if screensaver.prefer_blanking then display.clear()
+        elseif screensaver.allow_exposures then
+            display.setPixel(math.random(0, w * 6 - 1), math.random(0, h * 9 - 1), bit.blshift(1, math.random(0, 15)))
+            if not no_queue then os.queueEvent("nosleep") end
+        end
+    end
+    CCWinX.Flush(client, display)
+end
 
 --- Changes the properties of a graphics context.
 -- @param display The display to use
@@ -896,6 +924,11 @@ function CCWinX.CreateGC(client, display, d, values)
 end
 
 --- Creates a new image from image data.
+--
+-- You can load in images in bitmap, GIF, and NFP format using a string as data, 
+-- and images in pixmap, BLittle, and CCGraphics format using a table as data.<br> 
+-- By default NFP, BLittle, and CCGraphics images will be scaled up to native resolutions:
+-- use ImageFormat.Unscaled[NFP|BLT|CCG] to skip scaling.
 -- @param display The display to use
 -- @param format The format of the image data
 -- @param offset The offset of the image data (string data only)
@@ -903,10 +936,6 @@ end
 -- @param width The width of the image
 -- @param height The height of the image
 -- @return A new image
--- @note You can load in images in bitmap, GIF, and NFP format using a string as data, 
---       and images in pixmap, BLittle, and CCGraphics format using a table as data. 
---       By default NFP, BLittle, and CCGraphics images will be scaled up to native resolutions,
---       use ImageFormat.Unscaled[NFP|BLT|CCG] to skip scaling.
 function CCWinX.CreateImage(client, display, format, offset, data, width, height)
     local retval = {}
     if type(data) == "string" and offset ~= nil then data = string.sub(data, offset) end
@@ -1066,7 +1095,7 @@ function CCWinX.CreateWindow(client, display, parent, x, y, width, height, borde
     end
     function retval.setPixel(x, y, c) retval.buffer[y][x] = c end
     function retval.getPixel(x, y) return retval.buffer[y][x] end
-    function retval.drawPixel(x, y, c) parent.drawPixel(x, y, c == 0 and parent.getPixel(x, y) or c) end
+    function retval.drawPixel(x, y, c) parent.drawPixel(retval.frame.x + x, retval.frame.y + y, c == 0 and parent.getPixel(retval.frame.x + x, retval.frame.y + y) or c) end
     function retval.draw()
         if not retval.display then return end
         for y,r in pairs(retval.buffer) do for x,c in pairs(r) do 
@@ -1406,6 +1435,13 @@ function CCWinX.DrawText(client, display, d, gc, x, y, items)
     end
 end
 
+--- Either activates or deactivates a screensaver.
+-- Will block if activating screen saver, use coroutine to run in background.
+-- If deactivating and 
+-- @param display The display to set
+-- @param mode true to activate, false to deactivate
+function CCWinX.ForceScreenSaver(client, display, mode) if mode then CCWinX.ActivateScreenSaver(client, display) else CCWinX.ResetScreenSaver(client, display) end end
+
 --- Fills a rectangle.
 -- @param display The display to use
 -- @param d The object to draw on
@@ -1459,7 +1495,60 @@ function CCWinX.GetErrorText(client, display, code) return ErrorStrings[code] en
 -- @return A list of paths for fonts
 function CCWinX.GetFontPath() return font_dirs end
 
+--- Returns a subimage of a drawable source.
+-- @param display The display to use
+-- @param d The drawable to copy from
+-- @param x The X coordinate of the subimage
+-- @param y The Y coordinate of the subimage
+-- @param width The width of the subimage
+-- @param height The height of the subimage
+-- @param plane_mask A bitmask of the colors to copy (default is all/0xFFFF)
+function CCWinX.GetImage(client, display, d, x, y, width, height, plane_mask)
+    plane_mask = plane_mask or 0xFFFF
+    local tmp = CCWinX.CreatePixmap(client, display, d, width, height)
+    if type(tmp) == "number" then return tmp end
+    return CCWinX.CopyArea(client, display, d, tmp, {["function"] = "copy"}, x, y, width, height, 1, 1) or
+        CCWinX.CreateImage(client, display, ImageFormat.Pixmap, nil, tmp.buffer, width, height)
+end
 
+--- Returns a pixel in an image.
+-- @param ximage The image to check
+-- @param x The X coordinate
+-- @param y The Y coordinate
+-- @return The color of the pixel or nil
+-- @return If the first return value is nil, this value is the error code.
+function CCWinX.GetPixel(client, ximage, x, y)
+    if type(ximage) ~= "table" or ximage.data == nil then return nil, Error.BadImage end
+    if ximage.data[y] == nil or ximage.data[y][x] == nil then return nil, Error.BadMatch end
+    return ximage.data[y][x]
+end
+
+--- Returns the properties of the current screen saver.
+-- @return The timeout of the screen saver
+-- @return The interval of the screen saver exposure
+-- @return Whether to blank the screen
+-- @return Whether to display a randomizer screen saver
+function CCWinX.GetScreenSaver() return screensaver.timeout, screensaver.interval, screensaver.prefer_blanking, screensaver.allow_exposures end
+
+--- Copies a subimage of a drawable to an existing image.
+-- @param display The display to use
+-- @param d The drawable to copy from
+-- @param x The X coordinate of the subimage
+-- @param y The Y coordinate of the subimage
+-- @param width The width of the subimage
+-- @param height The height of the subimage
+-- @param plane_mask A bitmask of the colors to copy (default is all/0xFFFF)
+-- @param dest_image The image to copy to
+-- @param dest_x The X coordinate of the destination
+-- @param dest_y The Y coordinate of the destination
+function CCWinX.GetSubImage(client, display, d, x, y, width, height, plane_mask, dest_image, dest_x, dest_y)
+    plane_mask = plane_mask or 0xFFFF
+    local tmp = CCWinX.CreatePixmap(client, display, d, width, height)
+    if type(tmp) == "number" then return tmp end
+    local e = CCWinX.CopyArea(client, display, d, tmp, {["function"] = "copy"}, x, y, width, height, 1, 1)
+    if e then return e end
+    for y,r in pairs(tmp.buffer) do for x,c in pairs(r) do dest_image.data[dest_y+y-1][dest_x+x-1] = c end end
+end
 
 --- Loads a font into memory.
 -- @param display The display to use
@@ -1603,10 +1692,29 @@ function CCWinX.QueryTextExtents(client, display, font_ID, text)
     return direction, overall.ascent, overall.descent, overall
 end
 
+--- Resets the screen saver.
+-- @param display The display to set
+function CCWinX.ResetScreenSaver(client, display)
+    sendEvent("ForceScreenSaverReset", display.id)
+    os.pullEvent()
+end
+
 --- Sets the directories to search for font files.
 -- @param display The display to use
 -- @param directories The directories to search
 function CCWinX.SetFontPath(client, display, directories) font_dirs = directories or {"CCWinX/fonts"} end
+
+--- Sets the properties of the screen saver.
+-- @param display The display
+-- @param timeout The number of seconds to wait for screen saver (CCKernel2 only)
+-- @param interval The number of seconds between alterations
+-- @param prefer_blanking Whether to blank the screen for the screen saver
+-- @param allow_exposures Whether to activate randomizer screen saver
+function CCWinX.SetScreenSaver(client, display, timeout, interval, prefer_blanking, allow_exposures)
+    if timeout == -1 then timeout = 900
+    elseif timeout < 0 then return Error.BadValue end
+    screensaver = {timeout = timeout, interval = interval, prefer_blanking = prefer_blanking, allow_exposures = allow_exposures}
+end
 
 --- Unloads a previously loaded font.
 -- @param display The display to use
@@ -1632,6 +1740,13 @@ if shell or _FORK then
         if f == nil then log:error("Could not load default font") end
         while true do
             local args = {os.pullEvent()}
+            for k,v in pairs(displays) do if v.screensaver_coro ~= nil then
+                coroutine.resume(v.screensaver_coro)
+                if coroutine.status(v.screensaver_coro) ~= "suspended" then
+                    v.screensaver_coro = nil
+                    v.screensaver_timer = os.startTimer(screensaver.timeout)
+                end
+            end end
             local ev = table.remove(args, 1)
             if ev == "key" or ev == "char" or ev == "key_up" then
                 local pids = {}
@@ -1639,8 +1754,22 @@ if shell or _FORK then
                     kernel.send(w, ev, table.unpack(args))
                     pids[w] = true
                 end end end
+                if screensaver.timeout ~= 0 then for k,v in pairs(displays) do 
+                    os.cancelTimer(v.screensaver_timer)
+                    v.screensaver_timer = os.startTimer(screensaver.timeout)
+                end end
             elseif ev == "mouse_click" or ev == "mouse_up" or ev == "mouse_drag" or ev == "mouse_scroll" then
                 -- Handle mouse events
+                if screensaver.timeout ~= 0 then for k,v in pairs(displays) do 
+                    os.cancelTimer(v.screensaver_timer)
+                    v.screensaver_timer = os.startTimer(screensaver.timeout)
+                end end
+            elseif ev == "timer" then
+                for k,v in pairs(displays) do if v.screensaver_timer == args[1] then 
+                    v.screensaver_timer = nil
+                    v.screensaver_coro = coroutine.create(CCWinX.ActivateScreenSaver)
+                    coroutine.resume(v.screensaver_coro, _PID, v, true)
+                end end
             end
             local pid = table.remove(args, 1)
             if type(pid) == "number" then

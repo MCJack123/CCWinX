@@ -57,6 +57,10 @@
 <h2><a href="#Functions">Functions</a></h2>
 <table class="function_list">
 	<tr>
+	<td class="name" nowrap><a href="#ActivateScreenSaver">ActivateScreenSaver (display, no_queue)</a></td>
+	<td class="summary">Activates the screen saver.</td>
+	</tr>
+	<tr>
 	<td class="name" nowrap><a href="#ChangeGC">ChangeGC (display, gc, values)</a></td>
 	<td class="summary">Changes the properties of a graphics context.</td>
 	</tr>
@@ -201,6 +205,10 @@
 	<td class="summary">Draws a list of strings.</td>
 	</tr>
 	<tr>
+	<td class="name" nowrap><a href="#ForceScreenSaver">ForceScreenSaver (display, mode)</a></td>
+	<td class="summary">Either activates or deactivates a screensaver.</td>
+	</tr>
+	<tr>
 	<td class="name" nowrap><a href="#FillRectangle">FillRectangle (display, d, gc, x, y, width, height)</a></td>
 	<td class="summary">Fills a rectangle.</td>
 	</tr>
@@ -223,6 +231,22 @@
 	<tr>
 	<td class="name" nowrap><a href="#GetFontPath">GetFontPath (display)</a></td>
 	<td class="summary">Returns a list of paths to scan for fonts.</td>
+	</tr>
+	<tr>
+	<td class="name"><a href="#GetImage">GetImage (display, d, x, y, width, height, plane_mask)</a></td>
+	<td class="summary">Returns a subimage of a drawable source.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#GetPixel">GetPixel (ximage, x, y)</a></td>
+	<td class="summary">Returns a pixel in an image.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#GetScreenSaver">GetScreenSaver ()</a></td>
+	<td class="summary">Returns the properties of the current screen saver.</td>
+	</tr>
+	<tr>
+	<td class="name"><a href="#GetSubImage">GetSubImage (display, d, x, y, width, height, plane_mask, dest_image, dest_x, dest_y)</a></td>
+	<td class="summary">Copies a subimage of a drawable to an existing image.</td>
 	</tr>
 	<tr>
 	<td class="name" nowrap><a href="#LoadFont">LoadFont (display, name)</a></td>
@@ -249,8 +273,16 @@
 	<td class="summary">Returns the extents of a string with a font.</td>
 	</tr>
 	<tr>
+	<td class="name" nowrap><a href="#ResetScreenSaver">ResetScreenSaver (display)</a></td>
+	<td class="summary">Resets the screen saver.</td>
+	</tr>
+	<tr>
 	<td class="name" nowrap><a href="#SetFontPath">SetFontPath (display, directories)</a></td>
 	<td class="summary">Sets the directories to search for font files.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#SetScreenSaver">SetScreenSaver (display, timeout, interval, prefer_blanking, allow_exposures)</a></td>
+	<td class="summary">Sets the properties of the screen saver.</td>
 	</tr>
 	<tr>
 	<td class="name" nowrap><a href="#UnloadFont">UnloadFont (display, font)</a></td>
@@ -304,6 +336,31 @@
     <h2 class="section-header "><a name="Functions"></a>Functions</h2>
 
     <dl class="function">
+    <dt>
+    <a name = "ActivateScreenSaver"></a>
+    <strong>ActivateScreenSaver (display, no_queue)</strong>
+    </dt>
+    <dd>
+    Activates the screen saver.
+ This function will block until a keyboard/mouse event occurs, run this in a coroutine to allow background processing.
+ On CCKernel, the server *does* run this in a coroutine.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to suspend
+        </li>
+        <li><span class="parameter">no_queue</span>
+         Set to true to not queue events while exposing (use in a coroutine)
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
     <dt>
     <a name = "ChangeGC"></a>
     <strong>ChangeGC (display, gc, values)</strong>
@@ -675,6 +732,10 @@
     </dt>
     <dd>
     Creates a new image from image data.
+<p> You can load in images in bitmap, GIF, and NFP format using a string as data,
+ and images in pixmap, BLittle, and CCGraphics format using a table as data.<br>
+ By default NFP, BLittle, and CCGraphics images will be scaled up to native resolutions:
+ use ImageFormat.Unscaled[NFP|BLT|CCG] to skip scaling.
 
 
     <h3>Parameters:</h3>
@@ -1409,6 +1470,31 @@
 
 </dd>
     <dt>
+    <a name = "ForceScreenSaver"></a>
+    <strong>ForceScreenSaver (display, mode)</strong>
+    </dt>
+    <dd>
+    Either activates or deactivates a screensaver.
+ Will block if activating screen saver, use coroutine to run in background.
+ If deactivating and
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to set
+        </li>
+        <li><span class="parameter">mode</span>
+         true to activate, false to deactivate
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
     <a name = "FillRectangle"></a>
     <strong>FillRectangle (display, d, gc, x, y, width, height)</strong>
     </dt>
@@ -1580,6 +1666,149 @@
 
 </dd>
     <dt>
+    <a name = "GetImage"></a>
+    <strong>GetImage (display, d, x, y, width, height, plane_mask)</strong>
+    </dt>
+    <dd>
+    Returns a subimage of a drawable source.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">d</span>
+         The drawable to copy from
+        </li>
+        <li><span class="parameter">x</span>
+         The X coordinate of the subimage
+        </li>
+        <li><span class="parameter">y</span>
+         The Y coordinate of the subimage
+        </li>
+        <li><span class="parameter">width</span>
+         The width of the subimage
+        </li>
+        <li><span class="parameter">height</span>
+         The height of the subimage
+        </li>
+        <li><span class="parameter">plane_mask</span>
+         A bitmask of the colors to copy (default is all/0xFFFF)
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "GetPixel"></a>
+    <strong>GetPixel (ximage, x, y)</strong>
+    </dt>
+    <dd>
+    Returns a pixel in an image.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">ximage</span>
+         The image to check
+        </li>
+        <li><span class="parameter">x</span>
+         The X coordinate
+        </li>
+        <li><span class="parameter">y</span>
+         The Y coordinate
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+        <li>
+        The color of the pixel or nil</li>
+        <li>
+        If the first return value is nil, this value is the error code.</li>
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "GetScreenSaver"></a>
+    <strong>GetScreenSaver ()</strong>
+    </dt>
+    <dd>
+    Returns the properties of the current screen saver.
+
+
+
+    <h3>Returns:</h3>
+    <ol>
+        <li>
+        The timeout of the screen saver</li>
+        <li>
+        The interval of the screen saver exposure</li>
+        <li>
+        Whether to blank the screen</li>
+        <li>
+        Whether to display a randomizer screen saver</li>
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "GetSubImage"></a>
+    <strong>GetSubImage (display, d, x, y, width, height, plane_mask, dest_image, dest_x, dest_y)</strong>
+    </dt>
+    <dd>
+    Copies a subimage of a drawable to an existing image.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">d</span>
+         The drawable to copy from
+        </li>
+        <li><span class="parameter">x</span>
+         The X coordinate of the subimage
+        </li>
+        <li><span class="parameter">y</span>
+         The Y coordinate of the subimage
+        </li>
+        <li><span class="parameter">width</span>
+         The width of the subimage
+        </li>
+        <li><span class="parameter">height</span>
+         The height of the subimage
+        </li>
+        <li><span class="parameter">plane_mask</span>
+         A bitmask of the colors to copy (default is all/0xFFFF)
+        </li>
+        <li><span class="parameter">dest_image</span>
+         The image to copy to
+        </li>
+        <li><span class="parameter">dest_x</span>
+         The X coordinate of the destination
+        </li>
+        <li><span class="parameter">dest_y</span>
+         The Y coordinate of the destination
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
     <a name = "LoadFont"></a>
     <strong>LoadFont (display, name)</strong>
     </dt>
@@ -1734,9 +1963,35 @@
 
     <h3>Returns:</h3>
     <ol>
-
-        The direction (LTR = true), ascent, descent, and overall size table
+        <li>
+        The direction (LTR = true)</li>
+        <li>
+        Ascent</li>
+        <li>
+        Descent</li>
+        <li>
+        Overall size table</li>
     </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "ResetScreenSaver"></a>
+    <strong>ResetScreenSaver (display)</strong>
+    </dt>
+    <dd>
+    Resets the screen saver.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to set
+        </li>
+    </ul>
+
 
 
 
@@ -1757,6 +2012,38 @@
         </li>
         <li><span class="parameter">directories</span>
          The directories to search
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "SetScreenSaver"></a>
+    <strong>SetScreenSaver (display, timeout, interval, prefer_blanking, allow_exposures)</strong>
+    </dt>
+    <dd>
+    Sets the properties of the screen saver.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display
+        </li>
+        <li><span class="parameter">timeout</span>
+         The number of seconds to wait for screen saver (CCKernel2 only)
+        </li>
+        <li><span class="parameter">interval</span>
+         The number of seconds between alterations
+        </li>
+        <li><span class="parameter">prefer_blanking</span>
+         Whether to blank the screen for the screen saver
+        </li>
+        <li><span class="parameter">allow_exposures</span>
+         Whether to activate randomizer screen saver
         </li>
     </ul>
 
@@ -1825,6 +2112,9 @@
         </li>
         <li><span class="parameter">BadGC</span>
         Invalid gc
+        </li>
+        <li><span class="parameter">BadImage</span>
+        Invalid image
         </li>
     </ul>
 
@@ -2131,7 +2421,7 @@
 </div> <!-- id="main" -->
 <div id="about">
 <i>generated by <a href="http://github.com/stevedonovan/LDoc">LDoc 1.4.6</a></i>
-<i style="float:right;">Last updated 2019-06-18 00:37:22 </i>
+<i style="float:right;">Last updated 2019-06-19 00:50:03 </i>
 </div> <!-- id="about" -->
 </div> <!-- id="container" -->
 </body>
