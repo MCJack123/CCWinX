@@ -29,40 +29,40 @@ local function create_window()
 end
 
 local function set_up_gc()
-    text_box.gc = CCWinX.CreateGC(text_box.display, text_box.window)
-    text_box.gc.background = colors.white
-    text_box.gc.foregound = colors.black
+    text_box.gc = CCWinX.CreateGC(text_box.display, text_box.window, {background = colors.white, foreground = colors.black})
 end
 
 local function set_up_font()
     local fontname = "-*-Arial-*-R-*-*-14-*-*-*-*-*-*-*"
-    text_box.font = CCWinX.LoadQueryFont(text_box.display, fontname)
+    text_box.font = CCWinX.LoadFont(text_box.display, fontname)
     if not text_box.font then
         printError("unable to load font " .. fontname .. ": using fixed")
-        text_box.font = CCWinX.QueryFont(1)
+        text_box.font = CCWinX.LoadFont(text_box.display, "fixed")
     end
-    text_box.gc.font = text_box.font.fid
+    text_box.gc.font = text_box.font
 end
 
 local function draw_screen()
-    local x, y, direction, ascent, descent, overall = 0, 0,
-        CCWinX.QueryTextExtents(text_box.font.fid, text_box.text)
-    x = (text_box.width - overall.width) / 2
-    y = text_box.height / 2 + (ascent - descent) / 2
+    local x, y, direction, ascent, descent, overall = 0, 0, CCWinX.QueryTextExtents(text_box.display, text_box.font, text_box.text)
+    assert(type(direction) ~= "number", CCWinX.GetErrorText(nil, direction))
+    x = math.floor((text_box.width - overall.width) / 2)
+    y = math.floor(text_box.height / 2 + (ascent - descent) / 2)
     CCWinX.ClearWindow(text_box.display, text_box.window)
-    CCWinX.DrawString(text_box.display, text_box.window, text_box.gc, 
-        x, y, text_box.text)
-    CCWinX.Flush(text_box.display)
+    assert(CCWinX.DrawString(text_box.display, text_box.window, text_box.gc, 
+        x, y, text_box.text) == nil)
+    --CCWinX.Flush(text_box.display)
+    text_box.window.draw()
 end
 
 local function event_loop()
     while true do
         local e = {os.pullEvent()}
-        if e[1] == "char" and e[2] == "q" then break end
+        if e[1] == "char" and e[2] == "q" then break 
+        elseif e[1] == "char" and e[2] == "r" then draw_screen() end
     end
 end
 
-text_box.text = "Hello World"
+text_box.text = "Hello World!"
 x_connect()
 create_window()
 set_up_gc()

@@ -675,12 +675,7 @@ function CCWinX.ConfigureWindow(client, display, w, values)
                 end
             end
         elseif values.height < w.frame.height then
-            for y = values.height + 1, w.frame.height do
-                w.buffer[y] = {}
-                for x = 1, w.frame.width do
-                    w.buffer[y][x] = w.default_color
-                end
-            end
+            for y = values.height + 1, w.frame.height do w.buffer[y] = nil end
         end
         w.frame.height = values.height
     end
@@ -694,7 +689,7 @@ function CCWinX.ConfigureWindow(client, display, w, values)
         elseif values.width < w.frame.width then
             for y = 1, w.frame.height do
                 for x = values.width + 1, w.frame.width do
-                    w.buffer[y][x] = w.default_color
+                    w.buffer[y][x] = nil
                 end
             end
         end
@@ -1001,9 +996,13 @@ function CCWinX.CreateSimpleWindow(client, display, parent, x, y, width, height,
             end
         end
     end
-    function retval.setPixel(x, y, c) retval.buffer[y][x] = c end
+    function retval.setPixel(x, y, c)
+        if x % 1 > 0 then error(x, 2) end
+        if y % 1 > 0 then error(y, 2) end
+        retval.buffer[y][x] = c
+    end
     function retval.getPixel(x, y) return retval.buffer[y][x] end
-    function retval.drawPixel(x, y, c) parent.drawPixel(x, y, c == 0 and parent.getPixel(x, y) or c) end
+    function retval.drawPixel(x, y, c) parent.drawPixel(retval.frame.x + x, retval.frame.y + y, c == 0 and parent.getPixel(retval.frame.x + x, retval.frame.y + y) or c) end
     function retval.draw()
         if not retval.display then return end
         for y,r in pairs(retval.buffer) do for x,c in pairs(r) do 
@@ -1382,7 +1381,7 @@ function CCWinX.DrawString(client, display, d, gc, x, y, text)
     for c in string.gmatch(text, ".") do
         local fc = fonts[gc.font].chars[c]
         if x + fc.bounds.width + fc.bounds.x > d.frame.width or y + fc.bounds.height + fc.bounds.y > d.frame.height then return Error.BadMatch end
-        for py = 1, fc.bounds.height do for px = 1, fc.bounds.width do if fc.bitmap[py][px] then 
+        for py = 1, fc.bounds.height do for px = 1, fc.bounds.width do if fc.bitmap[py][px] then
             d.setPixel(x + px + fc.bounds.x, y + py - fc.bounds.y - fc.bounds.height + ascent - descent, gc.foreground) 
         end end end
         x = x + fc.device_width.x
@@ -1467,6 +1466,8 @@ function CCWinX.GetFontPath() return font_dirs end
 -- @param name The name of the font
 -- @return A font ID that can be used with QueryFont
 function CCWinX.LoadFont(client, display, name)
+    if name == "fixed" then name = "-ComputerCraft-CraftOS-Book-R-Mono--9-90-75-75-M-90-ISO8859-1" end
+    for k,font in pairs(fonts) do if string.find(font.id, string.gsub(string.gsub(string.gsub(name, "-", "%%-"), "?", "."), "*", ".*"), 1, false) then return k end end
     for _,font_dir in pairs(font_dirs) do
         for _,path in pairs(fs.list(font_dir)) do
             local file = fs.open(font_dir .. "/" .. path, "r")
@@ -1593,11 +1594,11 @@ function CCWinX.QueryTextExtents(client, display, font_ID, text)
     local overall = {lbearing = 0, rbearing = 0, width = 0, ascent = 0, descent = 0}
     for c in string.gmatch(text, ".") do
         local fch = fonts[font_ID].chars[c]
-        overall.ascent = math.max(overall.ascent, fch.bounds.y + fch.bounds.height)
-        overall.descent = math.min(overall.descent, fch.bounds.y)
-        overall.lbearing = math.min(overall.lbearing, fch.bounds.x + overall.width)
-        overall.rbearing = math.max(overall.rbearing, fch.bounds.x + fch.bounds.width + overall.width)
-        overall.width = overall.width + fch.device_width.x
+        overall.ascent = math.floor(math.max(overall.ascent, fch.bounds.y + fch.bounds.height))
+        overall.descent = math.floor(math.min(overall.descent, fch.bounds.y))
+        overall.lbearing = math.floor(math.min(overall.lbearing, fch.bounds.x + overall.width))
+        overall.rbearing = math.floor(math.max(overall.rbearing, fch.bounds.x + fch.bounds.width + overall.width))
+        overall.width = math.floor(overall.width + fch.device_width.x)
     end
     return direction, overall.ascent, overall.descent, overall
 end
