@@ -1550,6 +1550,44 @@ function CCWinX.GetSubImage(client, display, d, x, y, width, height, plane_mask,
     for y,r in pairs(tmp.buffer) do for x,c in pairs(r) do dest_image.data[dest_y+y-1][dest_x+x-1] = c end end
 end
 
+--- Sets a colormap onto a display.
+-- @param display The display to set
+-- @param colormap The colormap to use
+function CCWinX.InstallColormap(client, display, colormap) for k,v in pairs(colors) do display.setPaletteColor(colors[k], v.r / 255, v.g / 255, v.b / 255) end end
+
+--- Sends SIGINT to a client using a resource that has a client ID.
+-- @param display The display to use
+-- @param resource The resource to check
+function CCWinX.KillClient(client, display, resource)
+    if not kernel then return Error.BadMatch end
+    if type(resource) ~= "table" or resource.client == nil then return Error.BadValue end
+    kernel.kill(resource.client, signal.SIGINT)
+end
+
+--- Returns a list of fonts matching a pattern.
+-- @param display The display to use
+-- @param pattern The pattern to match
+-- @param maxnames The maximum number of names to match (defaults to all)
+-- @return A table with a list of matching fonts, or nil if none were found
+function CCWinX.ListFonts(client, display, pattern, maxnames)
+    if name == "fixed" then name = "-ComputerCraft-CraftOS-Book-R-Mono--9-90-75-75-M-90-ISO8859-1" end
+    for k,font in pairs(fonts) do if string.find(font.id, string.gsub(string.gsub(string.gsub(name, "-", "%%-"), "?", "."), "*", ".*"), 1, false) then return k end end
+    local retval = nil
+    for _,font_dir in pairs(font_dirs) do
+        for _,path in pairs(fs.list(font_dir)) do
+            local file = fs.open(font_dir .. "/" .. path, "r")
+            local font = readBDFFont(file.readAll())
+            file.close()
+            if font ~= nil and string.find(font.id, string.gsub(string.gsub(string.gsub(name, "-", "%%-"), "?", "."), "*", ".*"), 1, false) then
+                if not retval then retval = {} end
+                table.insert(retval, font.id)
+                if maxnames and #retval >= maxnames then return retval end
+            end
+        end
+    end
+    return retval
+end
+
 --- Loads a font into memory.
 -- @param display The display to use
 -- @param name The name of the font
