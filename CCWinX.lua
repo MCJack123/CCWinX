@@ -444,6 +444,12 @@ local function isLocked(display)
     return false
 end
 
+local function hitTest(win, x, y)
+
+end
+
+-- Beginning of public API
+
 --- Error codes
 Error = {
     BadColor = 0, -- Invalid color
@@ -455,6 +461,7 @@ Error = {
     BadFont = 6, -- Invalid font
     BadGC = 7, -- Invalid gc
     BadImage = 8, -- Invalid image
+    WTF = 9999, -- Should never happen
 }
 
 local ErrorStrings = {
@@ -466,7 +473,8 @@ local ErrorStrings = {
     [Error.BadName] = "Invalid name",
     [Error.BadFont] = "Invalid font",
     [Error.BadGC] = "Invalid graphics context",
-    [Error.BadImage] = "Invalid image"
+    [Error.BadImage] = "Invalid image",
+    [Error.WTF] = "This should never happen",
 }
 
 --- Image formats
@@ -875,6 +883,7 @@ function CCWinX.CopyGC(client, display, src, dest) for k,v in pairs(src) do dest
 -- @param display The display to use
 -- @return The new colormap
 function CCWinX.CreateColormap(client, display)
+    if type(display) ~= "table" or display.getPaletteColor == nil then return Error.BadValue end
     local retval = {}
     for k,v in pairs(colors) do if type(v) == "number" then
         retval[k] = {}
@@ -885,6 +894,8 @@ function CCWinX.CreateColormap(client, display)
     end end
     return retval
 end
+
+local default_colormap = CCWinX.CreateColormap(0, term.native())
 
 --- Creates a new graphics context.
 -- @param display The display to use
@@ -1135,6 +1146,8 @@ CCWinX.DefaultColormapOfScreen = CCWinX.DefaultColormap
 -- @param display The display to check
 -- @return The root window of the display
 function CCWinX.DefaultRootWindow(client, display) return display.root end
+CCWinX.RootWindow = CCWinX.DefaultRootWindow
+CCWinX.RootWindowOfScreen = CCWinX.DefaultRootWindow
 
 --- Returns the ID of the screen the display is on.
 -- @param display The display to check
@@ -1573,7 +1586,10 @@ function CCWinX.InitThreads() threads_enabled = true end
 --- Sets a colormap onto a display.
 -- @param display The display to set
 -- @param colormap The colormap to use
-function CCWinX.InstallColormap(client, display, colormap) for k,v in pairs(colors) do display.setPaletteColor(colors[k], v.r / 255, v.g / 255, v.b / 255) end end
+function CCWinX.InstallColormap(client, display, colormap)
+    while isLocked(client, display) do os.pullEvent() end
+    for k,v in pairs(colors) do display.setPaletteColor(colors[k], v.r / 255, v.g / 255, v.b / 255) end
+end
 
 --- Sends SIGINT to a client using a resource that has a client ID.
 -- @param display The display to use
@@ -1912,6 +1928,7 @@ function CCWinX.QueryTextExtents(client, display, font_ID, text)
     end
     return direction, overall.ascent, overall.descent, overall
 end
+CCWinX.TextExtents = CCWinX.QueryTextExtents
 
 --- Raises a window to the top of the parent's stack.
 -- @param display The display to use
@@ -1969,6 +1986,25 @@ function CCWinX.ResizeWindow(client, display, w, width, height)
     w.frame.width = width
 end
 
+--- Restacks a list of windows from top to bottom.
+-- @param display The display to use
+-- @param windows The windows to restack
+function CCWinX.RestackWindows(client, display, windows)
+    while isLocked(client, display) do os.pullEvent() end
+    if type(windows) ~= "table" or #windows < 1 then return Error.BadValue end
+    if type(windows[1]) ~= "table" or windows[1].parent == nil then return Error.BadWindow end
+    for k,v in pairs(windows) do if type(v) ~= "table" or v.parent == nil then return Error.BadWindow elseif v.parent ~= windows[1].parent then return Error.BadMatch end end
+    local win_base
+    local children = windows[1].parent.children
+    for k,v in pairs(children) do if v == windows[1] then win_base = k end end
+    if not win_base then return Error.WTF end
+    for k,v in pairs(windows) do if k > 1 then for l,w in pairs(children) do if w == v then 
+        table.remove(children, l)
+        table.insert(children, win_base + k - 1, v)
+        break
+    end end end end
+end
+
 --- Sets the directories to search for font files.
 -- @param display The display to use
 -- @param directories The directories to search
@@ -1987,6 +2023,86 @@ function CCWinX.SetScreenSaver(client, display, timeout, interval, prefer_blanki
     screensaver = {timeout = timeout, interval = interval, prefer_blanking = prefer_blanking, allow_exposures = allow_exposures}
 end
 
+--- Creates a subimage of another image.
+-- @param ximage The image to subimage
+-- @param x The X coordinate of the subimage
+-- @param y The Y coordinate of the subimage
+-- @param width The width of the subimage
+-- @param height The height of the subimage
+-- @return A new image with the contents of a rectange in the original
+function CCWinX.SubImage(client, ximage, x, y, width, height)
+    if type(ximage) ~= "table" or ximage.data == nil or ximage.width == nil or ximage.height == nil then return Error.BadImage end
+    if x + width > ximage.width or y + height > ximage.height or x < 1 or y < 1 then return Error.BadMatch end
+    local retval = {}
+    retval.width = width
+    retval.height = height
+    retval.format = ximage.format
+    retval.data = {}
+    for py = y, y + height - 1 do
+        retval.data[py-y+1] = {}
+        for px = x, x + width - 1 do retval.data[py-y+1][px-x+1] = ximage.data[py][px] end
+    end
+    return retval
+end
+
+--- Flushes the output buffer to the display.
+-- @param display The display to flush
+-- @param discard Whether to discard all events in the queue (defaults to false)
+function CCWinX.Sync(client, display, discard)
+    while isLocked(client, display) do os.pullEvent() end
+    display.root.draw()
+    if discard then
+        os.queueEvent("SyncDiscard")
+        os.pullEvent("SyncDiscard")
+    end
+end
+
+--- Returns the width of a string.
+-- @param font_struct The font to use
+-- @param str The string to check
+-- @return The width of the string in pixels
+function CCWinX.TextWidth(client, font_struct, str)
+    if type(font_struct) ~= "table" or font_struct.slant == nil or font_struct.chars == nil then return Error.BadFont end
+    local width = 0
+    for c in string.gmatch(text, ".") do width = math.floor(width + font_struct.chars[c].device_width.x) end
+    return width
+end
+
+--- Translates the coordinates in one window to coordinates in another window.
+-- @param display The display to use
+-- @param src_w The source window
+-- @param dest_w The destination window
+-- @param src_x The source X coordinate
+-- @param src_y The source Y coordinate
+-- @return The destination X coordinate (nil on error)
+-- @return The destination Y coordinate
+-- @return Whether the destination is a child of the source
+function CCWinX.TranslateCoordinates(client, display, src_w, dest_w, src_x, src_y)
+    if type(src_w) ~= "table" or type(dest_w) ~= "table" or src_w.frame == nil or dest_w.frame == nil then return nil, Error.BadWindow end
+    if src_w.display ~= display or dest_w.display ~= display then return nil, Error.BadMatch end
+    local win = src_w
+    local sx, sy = src_x, src_y
+    while win ~= display.root do
+        if win == dest_w then return sx, sy, true end
+        sx = sx + win.frame.x
+        sy = sy + win.frame.y
+        win = win.parent
+    end
+    local dx, dy = 0, 0
+    win = dest_w
+    while dest_w ~= display.root do
+        if win == src_w then return dx + src_x, dy + dest_y, false end
+        dx = dx + win.frame.x
+        dy = dy + win.frame.y
+        win = win.parent
+    end
+    return dx - sx, dy - sy, false
+end
+
+--- Resets the colormap on a display.
+-- @param display The display to modify
+function CCWinX.UninstallColormap(client, display) CCWinX.InstallColormap(client, display, default_colormap) end
+
 --- Unloads a previously loaded font.
 -- @param display The display to use
 -- @param font The font to unload
@@ -2000,6 +2116,24 @@ function CCWinX.UnlockDisplay(client, display)
         locked_displays[k] = nil
         return
     end end
+end
+
+--- Unmaps all subwindows of a window.
+-- @param display The display to use
+-- @param w The window to unmap the subwindows of
+function CCWinX.UnmapSubwindows(client, display, w)
+    if type(w) ~= "table" or w.children == nil then return Error.BadWindow end
+    for k,v in pairs(w.children) do CCWinX.UnmapWindow(client, display, v) end
+end
+
+--- Unmaps a window from a display.
+-- @param display The display to use
+-- @param w The window to unmap
+function CCWinX.UnmapWindow(client, display, w)
+    while isLocked(client, display) do os.pullEvent() end
+    if type(w) ~= "table" or w.parent == nil then return Error.BadWindow end
+    w.display = nil
+    w.parent.draw()
 end
 
 -- If run under CCKernel2 through a shell or forked: start a CCWinX server to listen to apps
