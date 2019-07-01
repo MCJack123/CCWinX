@@ -730,7 +730,6 @@ end
 -- @param event_type The type of event to match
 -- @return Whether a match was found
 -- @return The event found
--- @see CCWinX.TypedEvent
 function CCWinX.CheckTypedEvent(client, display, event_type)
     for k,v in pairs(event_queue) do if v[1] == event_type then return true, table.remove(event_queue, k) end end
     return false
@@ -742,7 +741,6 @@ end
 -- @param event_type The event type to match
 -- @return Whether a match was found
 -- @return The event found
--- @see CCWinX.TypedWindowEvent
 function CCWinX.CheckTypedWindowEvent(client, display, w, event_type)
     for k,v in pairs(event_queue) do if v[1] == event_type then for l,x in pairs(v) do if w == x then return true, table.remove(event_queue, k) end end end end
     return false

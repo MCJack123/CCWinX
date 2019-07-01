@@ -69,6 +69,26 @@
 	<td class="summary">Changes the attributes of a window.</td>
 	</tr>
 	<tr>
+	<td class="name" nowrap><a href="#CheckIfEvent">CheckIfEvent (display, predicate, arg)</a></td>
+	<td class="summary">Checks if an event matching a function is in the queue.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#CheckMaskEvent">CheckMaskEvent (display, event_mask)</a></td>
+	<td class="summary">Checks if an event matching any type in a list is in the queue.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#CheckTypedEvent">CheckTypedEvent (display, event_type)</a></td>
+	<td class="summary">Checks if an event matching a type is in the queue.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#CheckTypedWindowEvent">CheckTypedWindowEvent (display, w, event_type)</a></td>
+	<td class="summary">Checks if an event matching a window and event type is in the queue.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#CheckWindowEvent">CheckWindowEvent (display, w, event_mask)</a></td>
+	<td class="summary">Checks if an event matching a window and event mask is in the queue.</td>
+	</tr>
+	<tr>
 	<td class="name" nowrap><a href="#CirculateSubwindowsDown">CirculateSubwindowsDown (display, w)</a></td>
 	<td class="summary">Moves the top child of a window to the bottom.</td>
 	</tr>
@@ -133,6 +153,10 @@
 	<td class="summary">Returns the default colormap.</td>
 	</tr>
 	<tr>
+	<td class="name" nowrap><a href="#DefaultGC">DefaultGC ()</a></td>
+	<td class="summary">Returns the default graphics context.</td>
+	</tr>
+	<tr>
 	<td class="name" nowrap><a href="#DefaultRootWindow">DefaultRootWindow (display)</a></td>
 	<td class="summary">Returns the root window for the display.</td>
 	</tr>
@@ -149,12 +173,16 @@
 	<td class="summary">Destroys a window.</td>
 	</tr>
 	<tr>
-	<td class="name" nowrap><a href="#DisplayWidth">DisplayWidth (display)</a></td>
-	<td class="summary">Returns the width of a display.</td>
-	</tr>
-	<tr>
 	<td class="name" nowrap><a href="#DisplayHeight">DisplayHeight (display)</a></td>
 	<td class="summary">Returns the height of a display.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#DisplayString">DisplayString (client, display)</a></td>
+	<td class="summary">Returns the ID of the display.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#DisplayWidth">DisplayWidth (display)</a></td>
+	<td class="summary">Returns the width of a display.</td>
 	</tr>
 	<tr>
 	<td class="name" nowrap><a href="#Draw">Draw (display, d, gc, vlist)</a></td>
@@ -205,8 +233,8 @@
 	<td class="summary">Draws a list of strings.</td>
 	</tr>
 	<tr>
-	<td class="name" nowrap><a href="#ForceScreenSaver">ForceScreenSaver (display, mode)</a></td>
-	<td class="summary">Either activates or deactivates a screensaver.</td>
+	<td class="name" nowrap><a href="#EventsQueued">EventsQueued (display, mode)</a></td>
+	<td class="summary">Returns the number of events in the event queue depending on the mode.</td>
 	</tr>
 	<tr>
 	<td class="name" nowrap><a href="#FillRectangle">FillRectangle (display, d, gc, x, y, width, height)</a></td>
@@ -219,6 +247,10 @@
 	<tr>
 	<td class="name" nowrap><a href="#Flush">Flush (display)</a></td>
 	<td class="summary">Redraws all windows on a display.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#ForceScreenSaver">ForceScreenSaver (display, mode)</a></td>
+	<td class="summary">Either activates or deactivates a screensaver.</td>
 	</tr>
 	<tr>
 	<td class="name" nowrap><a href="#GetDefault">GetDefault (display, program, option)</a></td>
@@ -249,6 +281,30 @@
 	<td class="summary">Copies a subimage of a drawable to an existing image.</td>
 	</tr>
 	<tr>
+	<td class="name" nowrap><a href="#IfEvent">IfEvent (display, predicate, arg)</a></td>
+	<td class="summary">Calls a function for each event, and returns the first event where the function returns true</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#InitThreads">InitThreads ()</a></td>
+	<td class="summary">Enables multithreading support for the current CCWinX session.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#InstallColormap">InstallColormap (display, colormap)</a></td>
+	<td class="summary">Sets a colormap onto a display.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#KillClient">KillClient (display, resource)</a></td>
+	<td class="summary">Sends SIGINT to a client using a resource that has a client ID.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#ListFonts">ListFonts (display, pattern, maxnames)</a></td>
+	<td class="summary">Returns a list of fonts matching a pattern.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#ListProperties">ListProperties (display, w)</a></td>
+	<td class="summary">Returns a list of property names on a window.</td>
+	</tr>
+	<tr>
 	<td class="name" nowrap><a href="#LoadFont">LoadFont (display, name)</a></td>
 	<td class="summary">Loads a font into memory.</td>
 	</tr>
@@ -257,12 +313,100 @@
 	<td class="summary">Loads and returns a font.</td>
 	</tr>
 	<tr>
+	<td class="name" nowrap><a href="#LockDisplay">LockDisplay (display)</a></td>
+	<td class="summary">Locks a display to disallow all other operations on the display.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#LookupColor">LookupColor (display, colormap, color_name)</a></td>
+	<td class="summary">Returns the RGB values for 1) a color in a colormap, and 2) the closest color in the screen's colormap</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#LowerWindow">LowerWindow (display, w)</a></td>
+	<td class="summary">Moves a window to the bottom of the parent's stack.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#MapRaised">MapRaised (display, w)</a></td>
+	<td class="summary">Maps and raises a window.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#MapSubwindows">MapSubwindows (display, w)</a></td>
+	<td class="summary">Maps all subwindows of a window.</td>
+	</tr>
+	<tr>
 	<td class="name" nowrap><a href="#MapWindow">MapWindow (display, w)</a></td>
 	<td class="summary">Maps a window onto a display.</td>
 	</tr>
 	<tr>
+	<td class="name" nowrap><a href="#MaskEvent">MaskEvent (display, event_mask)</a></td>
+	<td class="summary">Waits for an event matching any type in a list to be queued.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#MoveResizeWindow">MoveResizeWindow (display, w, x, y, width, height)</a></td>
+	<td class="summary">Moves and resizes a window.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#MoveWindow">MoveWindow (display, w, x, y)</a></td>
+	<td class="summary">Moves a window.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#NextEvent">NextEvent ()</a></td>
+	<td class="summary">Returns the next event in the queue.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#NoOp">NoOp (display)</a></td>
+	<td class="summary">Does nothing.</td>
+	</tr>
+	<tr>
 	<td class="name" nowrap><a href="#OpenDisplay">OpenDisplay (id)</a></td>
 	<td class="summary">Opens a display for a program to use.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#ParseGeometry">ParseGeometry (parsestring)</a></td>
+	<td class="summary">Parses a geometry string in the form of [=][&lt;width&gt;{xX}&lt;height&gt;][{+-}&lt;xoffset&gt;{+-}&lt;yoffset&gt;].</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#PeekEvent">PeekEvent ()</a></td>
+	<td class="summary">Returns the next event in the queue without removing it.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#PeekIfEvent">PeekIfEvent (display, predicate, arg)</a></td>
+	<td class="summary">Calls a function for each event, and returns the first event where the function returns true without removing it from the queue</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#ProtocolVersion">ProtocolVersion ()</a></td>
+	<td class="summary">Returns the X protocol version implemented by CCWinX.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#ProtocolRevision">ProtocolRevision ()</a></td>
+	<td class="summary">Returns the X protocol revision implemented by CCWinX.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#PullEvent">PullEvent (mask)</a></td>
+	<td class="summary">Returns the next event in the queue with syntax similar to os.pullEvent.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#PutBackEvent">PutBackEvent (display, event)</a></td>
+	<td class="summary">Places an event back at the beginning of the queue.</td>
+	</tr>
+	<tr>
+	<td class="name"><a href="#PutImage">PutImage (display, d, gc, image, src_x, src_y, dest_x, dest_y, width, height)</a></td>
+	<td class="summary">Draws an image onto a drawable.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#PutPixel">PutPixel (ximage, x, y, pixel)</a></td>
+	<td class="summary">Sets a pixel in an image.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#QLength">QLength ()</a></td>
+	<td class="summary">Returns the number of events in the queue.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#QueryColor">QueryColor (display, colormap, color)</a></td>
+	<td class="summary">Returns the RGB values for a color value.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#QueryColors">QueryColors (display, colormap, colors_in)</a></td>
+	<td class="summary">Returns a list of RGB values for a list of color values.</td>
 	</tr>
 	<tr>
 	<td class="name" nowrap><a href="#QueryFont">QueryFont (display, font_ID)</a></td>
@@ -273,20 +417,80 @@
 	<td class="summary">Returns the extents of a string with a font.</td>
 	</tr>
 	<tr>
+	<td class="name" nowrap><a href="#QueueEvent">QueueEvent (type, ...)</a></td>
+	<td class="summary">Queues an event using a syntax similar to os.queueEvent.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#RaiseWindow">RaiseWindow (display, w)</a></td>
+	<td class="summary">Raises a window to the top of the parent's stack.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#ReparentWindow">ReparentWindow (display, w, parent, x, y)</a></td>
+	<td class="summary">Changes the parent of a window.</td>
+	</tr>
+	<tr>
 	<td class="name" nowrap><a href="#ResetScreenSaver">ResetScreenSaver (display)</a></td>
 	<td class="summary">Resets the screen saver.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#ResizeWindow">ResizeWindow (display, w, width, height)</a></td>
+	<td class="summary">Resizes a window.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#RestackWindows">RestackWindows (display, windows)</a></td>
+	<td class="summary">Restacks a list of windows from top to bottom.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#SendEvent">SendEvent (display, event)</a></td>
+	<td class="summary">Adds an event to the end of the queue.</td>
 	</tr>
 	<tr>
 	<td class="name" nowrap><a href="#SetFontPath">SetFontPath (display, directories)</a></td>
 	<td class="summary">Sets the directories to search for font files.</td>
 	</tr>
 	<tr>
-	<td class="name" nowrap><a href="#SetScreenSaver">SetScreenSaver (display, timeout, interval, prefer_blanking, allow_exposures)</a></td>
+	<td class="name"><a href="#SetScreenSaver">SetScreenSaver (display, timeout, interval, prefer_blanking, allow_exposures)</a></td>
 	<td class="summary">Sets the properties of the screen saver.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#SubImage">SubImage (ximage, x, y, width, height)</a></td>
+	<td class="summary">Creates a subimage of another image.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#Sync">Sync (display, discard)</a></td>
+	<td class="summary">Flushes the output buffer to the display.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#TextWidth">TextWidth (font_struct, str)</a></td>
+	<td class="summary">Returns the width of a string.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#TranslateCoordinates">TranslateCoordinates (display, src_w, dest_w, src_x, src_y)</a></td>
+	<td class="summary">Translates the coordinates in one window to coordinates in another window.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#UninstallColormap">UninstallColormap (display, colormap)</a></td>
+	<td class="summary">Resets the colormap on a display.</td>
 	</tr>
 	<tr>
 	<td class="name" nowrap><a href="#UnloadFont">UnloadFont (display, font)</a></td>
 	<td class="summary">Unloads a previously loaded font.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#UnlockDisplay">UnlockDisplay (display)</a></td>
+	<td class="summary">Unlocks a previously locked display.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#UnmapSubwindows">UnmapSubwindows (display, w)</a></td>
+	<td class="summary">Unmaps all subwindows of a window.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#UnmapWindow">UnmapWindow (display, w)</a></td>
+	<td class="summary">Unmaps a window from a display.</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#WindowEvent">WindowEvent (display, w, event_mask)</a></td>
+	<td class="summary">Waits until an event matching a window and event mask is queued.</td>
 	</tr>
 </table>
 <h2><a href="#Tables">Tables</a></h2>
@@ -326,6 +530,14 @@
 	<tr>
 	<td class="name" nowrap><a href="#Fill">Fill</a></td>
 	<td class="summary">Methods to fill areas</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#Queued">Queued</a></td>
+	<td class="summary">Modes to check the number of events in the queue</td>
+	</tr>
+	<tr>
+	<td class="name" nowrap><a href="#KeyMask">KeyMask</a></td>
+	<td class="summary">Button mask</td>
 	</tr>
 </table>
 
@@ -410,6 +622,177 @@
 
 
 
+
+
+</dd>
+    <dt>
+    <a name = "CheckIfEvent"></a>
+    <strong>CheckIfEvent (display, predicate, arg)</strong>
+    </dt>
+    <dd>
+    Checks if an event matching a function is in the queue.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">predicate</span>
+         The function to call of prototype `function predicate(arg: any, event: table) -> boolean`
+        </li>
+        <li><span class="parameter">arg</span>
+         An argument to pass to predicate
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+        <li>
+        Whether a match was found</li>
+        <li>
+        The first event that matches</li>
+    </ol>
+
+
+    <h3>See also:</h3>
+    <ul>
+         <a href="index.html#IfEvent">CCWinX.IfEvent</a>
+    </ul>
+
+
+</dd>
+    <dt>
+    <a name = "CheckMaskEvent"></a>
+    <strong>CheckMaskEvent (display, event_mask)</strong>
+    </dt>
+    <dd>
+    Checks if an event matching any type in a list is in the queue.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">event_mask</span>
+         A list of events to match
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+        <li>
+        Whether a match was found</li>
+        <li>
+        The event found</li>
+    </ol>
+
+
+    <h3>See also:</h3>
+    <ul>
+         <a href="index.html#MaskEvent">CCWinX.MaskEvent</a>
+    </ul>
+
+
+</dd>
+    <dt>
+    <a name = "CheckTypedEvent"></a>
+    <strong>CheckTypedEvent (display, event_type)</strong>
+    </dt>
+    <dd>
+    Checks if an event matching a type is in the queue.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">event_type</span>
+         The type of event to match
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+        <li>
+        Whether a match was found</li>
+        <li>
+        The event found</li>
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "CheckTypedWindowEvent"></a>
+    <strong>CheckTypedWindowEvent (display, w, event_type)</strong>
+    </dt>
+    <dd>
+    Checks if an event matching a window and event type is in the queue.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">w</span>
+         The window to scan for
+        </li>
+        <li><span class="parameter">event_type</span>
+         The event type to match
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+        <li>
+        Whether a match was found</li>
+        <li>
+        The event found</li>
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "CheckWindowEvent"></a>
+    <strong>CheckWindowEvent (display, w, event_mask)</strong>
+    </dt>
+    <dd>
+    Checks if an event matching a window and event mask is in the queue.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">w</span>
+         The window to scan for
+        </li>
+        <li><span class="parameter">event_mask</span>
+         A list of events to allow for, or nil to allow all
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+        <li>
+        Whether a match was found</li>
+        <li>
+        The event that matches</li>
+    </ol>
+
+
+    <h3>See also:</h3>
+    <ul>
+         <a href="index.html#WindowEvent">CCWinX.WindowEvent</a>
+    </ul>
 
 
 </dd>
@@ -732,7 +1115,8 @@
     </dt>
     <dd>
     Creates a new image from image data.
-<p> You can load in images in bitmap, GIF, and NFP format using a string as data,
+
+ You can load in images in bitmap, GIF, and NFP format using a string as data,
  and images in pixmap, BLittle, and CCGraphics format using a table as data.<br>
  By default NFP, BLittle, and CCGraphics images will be scaled up to native resolutions:
  use ImageFormat.Unscaled[NFP|BLT|CCG] to skip scaling.
@@ -922,6 +1306,25 @@
 
 </dd>
     <dt>
+    <a name = "DefaultGC"></a>
+    <strong>DefaultGC ()</strong>
+    </dt>
+    <dd>
+    Returns the default graphics context.
+
+
+
+    <h3>Returns:</h3>
+    <ol>
+
+        The default graphics context
+    </ol>
+
+
+
+
+</dd>
+    <dt>
     <a name = "DefaultRootWindow"></a>
     <strong>DefaultRootWindow (display)</strong>
     </dt>
@@ -1018,31 +1421,6 @@
 
 </dd>
     <dt>
-    <a name = "DisplayWidth"></a>
-    <strong>DisplayWidth (display)</strong>
-    </dt>
-    <dd>
-    Returns the width of a display.
-
-
-    <h3>Parameters:</h3>
-    <ul>
-        <li><span class="parameter">display</span>
-         The display to check
-        </li>
-    </ul>
-
-    <h3>Returns:</h3>
-    <ol>
-
-        The width of the display
-    </ol>
-
-
-
-
-</dd>
-    <dt>
     <a name = "DisplayHeight"></a>
     <strong>DisplayHeight (display)</strong>
     </dt>
@@ -1061,6 +1439,59 @@
     <ol>
 
         The height of the display
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "DisplayString"></a>
+    <strong>DisplayString (client, display)</strong>
+    </dt>
+    <dd>
+    Returns the ID of the display.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">client</span>
+
+        </li>
+        <li><span class="parameter">display</span>
+
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+
+        The ID passed to CCWinX.OpenDisplay()
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "DisplayWidth"></a>
+    <strong>DisplayWidth (display)</strong>
+    </dt>
+    <dd>
+    Returns the width of a display.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to check
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+
+        The width of the display
     </ol>
 
 
@@ -1470,27 +1901,34 @@
 
 </dd>
     <dt>
-    <a name = "ForceScreenSaver"></a>
-    <strong>ForceScreenSaver (display, mode)</strong>
+    <a name = "EventsQueued"></a>
+    <strong>EventsQueued (display, mode)</strong>
     </dt>
     <dd>
-    Either activates or deactivates a screensaver.
- Will block if activating screen saver, use coroutine to run in background.
- If deactivating and
+    Returns the number of events in the event queue depending on the mode.
 
 
     <h3>Parameters:</h3>
     <ul>
         <li><span class="parameter">display</span>
-         The display to set
+         The display to use
         </li>
         <li><span class="parameter">mode</span>
-         true to activate, false to deactivate
+         The mode to use
         </li>
     </ul>
 
+    <h3>Returns:</h3>
+    <ol>
+
+        The number of events in the queue
+    </ol>
 
 
+    <h3>See also:</h3>
+    <ul>
+         <a href="index.html#Queued">Queued</a>
+    </ul>
 
 
 </dd>
@@ -1573,6 +2011,31 @@
     <ul>
         <li><span class="parameter">display</span>
          The display to redraw
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "ForceScreenSaver"></a>
+    <strong>ForceScreenSaver (display, mode)</strong>
+    </dt>
+    <dd>
+    Either activates or deactivates a screensaver.
+ Will block if activating screen saver, use coroutine to run in background.
+ If deactivating and
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to set
+        </li>
+        <li><span class="parameter">mode</span>
+         true to activate, false to deactivate
         </li>
     </ul>
 
@@ -1809,6 +2272,156 @@
 
 </dd>
     <dt>
+    <a name = "IfEvent"></a>
+    <strong>IfEvent (display, predicate, arg)</strong>
+    </dt>
+    <dd>
+    Calls a function for each event, and returns the first event where the function returns true
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">predicate</span>
+         The function to call of prototype `function predicate(arg: any, event: table) -> boolean`
+        </li>
+        <li><span class="parameter">arg</span>
+         An argument to pass to predicate
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+
+        The first event that matches
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "InitThreads"></a>
+    <strong>InitThreads ()</strong>
+    </dt>
+    <dd>
+    Enables multithreading support for the current CCWinX session.
+
+
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "InstallColormap"></a>
+    <strong>InstallColormap (display, colormap)</strong>
+    </dt>
+    <dd>
+    Sets a colormap onto a display.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to set
+        </li>
+        <li><span class="parameter">colormap</span>
+         The colormap to use
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "KillClient"></a>
+    <strong>KillClient (display, resource)</strong>
+    </dt>
+    <dd>
+    Sends SIGINT to a client using a resource that has a client ID.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">resource</span>
+         The resource to check
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "ListFonts"></a>
+    <strong>ListFonts (display, pattern, maxnames)</strong>
+    </dt>
+    <dd>
+    Returns a list of fonts matching a pattern.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">pattern</span>
+         The pattern to match
+        </li>
+        <li><span class="parameter">maxnames</span>
+         The maximum number of names to match (defaults to all)
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+
+        A table with a list of matching fonts, or nil if none were found
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "ListProperties"></a>
+    <strong>ListProperties (display, w)</strong>
+    </dt>
+    <dd>
+    Returns a list of property names on a window.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">w</span>
+         The window to check
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+
+        A list of property names
+    </ol>
+
+
+
+
+</dd>
+    <dt>
     <a name = "LoadFont"></a>
     <strong>LoadFont (display, name)</strong>
     </dt>
@@ -1865,6 +2478,128 @@
 
 </dd>
     <dt>
+    <a name = "LockDisplay"></a>
+    <strong>LockDisplay (display)</strong>
+    </dt>
+    <dd>
+    Locks a display to disallow all other operations on the display.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to lock
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "LookupColor"></a>
+    <strong>LookupColor (display, colormap, color_name)</strong>
+    </dt>
+    <dd>
+    Returns the RGB values for 1) a color in a colormap, and 2) the closest color in the screen's colormap
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">colormap</span>
+         The colormap to use
+        </li>
+        <li><span class="parameter">color_name</span>
+         The name or color value of the color
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+        <li>
+        The RGB values of the color</li>
+        <li>
+        The RGB values of the color closest to return value #1 in the current colormap</li>
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "LowerWindow"></a>
+    <strong>LowerWindow (display, w)</strong>
+    </dt>
+    <dd>
+    Moves a window to the bottom of the parent's stack.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">w</span>
+         The window to lower
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "MapRaised"></a>
+    <strong>MapRaised (display, w)</strong>
+    </dt>
+    <dd>
+    Maps and raises a window.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">w</span>
+         The window to map and raise
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "MapSubwindows"></a>
+    <strong>MapSubwindows (display, w)</strong>
+    </dt>
+    <dd>
+    Maps all subwindows of a window.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">w</span>
+         The window to map the subwindows of
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
     <a name = "MapWindow"></a>
     <strong>MapWindow (display, w)</strong>
     </dt>
@@ -1879,6 +2614,137 @@
         </li>
         <li><span class="parameter">w</span>
          The window to map
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "MaskEvent"></a>
+    <strong>MaskEvent (display, event_mask)</strong>
+    </dt>
+    <dd>
+    Waits for an event matching any type in a list to be queued.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">event_mask</span>
+         A list of events to match
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+
+        The event found
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "MoveResizeWindow"></a>
+    <strong>MoveResizeWindow (display, w, x, y, width, height)</strong>
+    </dt>
+    <dd>
+    Moves and resizes a window.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">w</span>
+         The window to modify
+        </li>
+        <li><span class="parameter">x</span>
+         The new X coordinate of the window
+        </li>
+        <li><span class="parameter">y</span>
+         The new Y coordinate of the window
+        </li>
+        <li><span class="parameter">width</span>
+         The new width of the window
+        </li>
+        <li><span class="parameter">height</span>
+         The new height of the window
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "MoveWindow"></a>
+    <strong>MoveWindow (display, w, x, y)</strong>
+    </dt>
+    <dd>
+    Moves a window.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">w</span>
+         The window to modify
+        </li>
+        <li><span class="parameter">x</span>
+         The new X coordinate of the window
+        </li>
+        <li><span class="parameter">y</span>
+         The new Y coordinate of the window
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "NextEvent"></a>
+    <strong>NextEvent ()</strong>
+    </dt>
+    <dd>
+    Returns the next event in the queue.
+
+
+
+    <h3>Returns:</h3>
+    <ol>
+
+        The next event in the queue
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "NoOp"></a>
+    <strong>NoOp (display)</strong>
+    </dt>
+    <dd>
+    Does nothing.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
         </li>
     </ul>
 
@@ -1906,6 +2772,322 @@
     <ol>
 
         An object describing the display or nil
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "ParseGeometry"></a>
+    <strong>ParseGeometry (parsestring)</strong>
+    </dt>
+    <dd>
+    Parses a geometry string in the form of [=][<width>{xX}<height>][{+-}<xoffset>{+-}<yoffset>].
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">parsestring</span>
+         The string to parse
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+        <li>
+        The X offset</li>
+        <li>
+        The Y offset</li>
+        <li>
+        The width</li>
+        <li>
+        The height</li>
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "PeekEvent"></a>
+    <strong>PeekEvent ()</strong>
+    </dt>
+    <dd>
+    Returns the next event in the queue without removing it.
+
+
+
+    <h3>Returns:</h3>
+    <ol>
+
+        The next event in the queue
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "PeekIfEvent"></a>
+    <strong>PeekIfEvent (display, predicate, arg)</strong>
+    </dt>
+    <dd>
+    Calls a function for each event, and returns the first event where the function returns true without removing it from the queue
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">predicate</span>
+         The function to call of prototype `function predicate(arg: any, event: table) -> boolean`
+        </li>
+        <li><span class="parameter">arg</span>
+         An argument to pass to predicate
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+
+        The first event that matches
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "ProtocolVersion"></a>
+    <strong>ProtocolVersion ()</strong>
+    </dt>
+    <dd>
+    Returns the X protocol version implemented by CCWinX.
+
+
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "ProtocolRevision"></a>
+    <strong>ProtocolRevision ()</strong>
+    </dt>
+    <dd>
+    Returns the X protocol revision implemented by CCWinX.
+
+
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "PullEvent"></a>
+    <strong>PullEvent (mask)</strong>
+    </dt>
+    <dd>
+    Returns the next event in the queue with syntax similar to os.pullEvent.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">mask</span>
+         The event type to match, or nil
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+        <li>
+        The type of event</li>
+        <li>
+        Each argument in the event</li>
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "PutBackEvent"></a>
+    <strong>PutBackEvent (display, event)</strong>
+    </dt>
+    <dd>
+    Places an event back at the beginning of the queue.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">event</span>
+         The event to put back
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "PutImage"></a>
+    <strong>PutImage (display, d, gc, image, src_x, src_y, dest_x, dest_y, width, height)</strong>
+    </dt>
+    <dd>
+    Draws an image onto a drawable.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">d</span>
+         The drawable to draw on
+        </li>
+        <li><span class="parameter">gc</span>
+         The graphics context to use
+        </li>
+        <li><span class="parameter">image</span>
+         The image to draw
+        </li>
+        <li><span class="parameter">src_x</span>
+         The X offset in the image
+        </li>
+        <li><span class="parameter">src_y</span>
+         The Y offset in the image
+        </li>
+        <li><span class="parameter">dest_x</span>
+         The X coordinate to draw at
+        </li>
+        <li><span class="parameter">dest_y</span>
+         The Y coordinate to draw at
+        </li>
+        <li><span class="parameter">width</span>
+         The width of the subimage to draw
+        </li>
+        <li><span class="parameter">height</span>
+         The height of the subimage to draw
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "PutPixel"></a>
+    <strong>PutPixel (ximage, x, y, pixel)</strong>
+    </dt>
+    <dd>
+    Sets a pixel in an image.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">ximage</span>
+         The image to modify
+        </li>
+        <li><span class="parameter">x</span>
+         The X coordinate of the pixel
+        </li>
+        <li><span class="parameter">y</span>
+         The Y coordinate of the pixel
+        </li>
+        <li><span class="parameter">pixel</span>
+         The value to set to
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "QLength"></a>
+    <strong>QLength ()</strong>
+    </dt>
+    <dd>
+    Returns the number of events in the queue.
+
+
+
+    <h3>Returns:</h3>
+    <ol>
+
+        The number of events in the queue
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "QueryColor"></a>
+    <strong>QueryColor (display, colormap, color)</strong>
+    </dt>
+    <dd>
+    Returns the RGB values for a color value.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">colormap</span>
+         The colormap to check
+        </li>
+        <li><span class="parameter">color</span>
+         The color to check
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+
+        The RGB values of the color
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "QueryColors"></a>
+    <strong>QueryColors (display, colormap, colors_in)</strong>
+    </dt>
+    <dd>
+    Returns a list of RGB values for a list of color values.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">colormap</span>
+         The colormap to check
+        </li>
+        <li><span class="parameter">colors_in</span>
+         The colors to check
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+
+        The RGB values of each color
     </ol>
 
 
@@ -1978,6 +3160,84 @@
 
 </dd>
     <dt>
+    <a name = "QueueEvent"></a>
+    <strong>QueueEvent (type, ...)</strong>
+    </dt>
+    <dd>
+    Queues an event using a syntax similar to os.queueEvent.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">type</span>
+         The event type
+        </li>
+        <li><span class="parameter">...</span>
+         The event arguments
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "RaiseWindow"></a>
+    <strong>RaiseWindow (display, w)</strong>
+    </dt>
+    <dd>
+    Raises a window to the top of the parent's stack.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">w</span>
+         The window to raise
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "ReparentWindow"></a>
+    <strong>ReparentWindow (display, w, parent, x, y)</strong>
+    </dt>
+    <dd>
+    Changes the parent of a window.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">w</span>
+         The window to reparent
+        </li>
+        <li><span class="parameter">parent</span>
+         The new parent window
+        </li>
+        <li><span class="parameter">x</span>
+         The new X coordinate inside the parent
+        </li>
+        <li><span class="parameter">y</span>
+         The new Y coordinate inside the parent
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
     <a name = "ResetScreenSaver"></a>
     <strong>ResetScreenSaver (display)</strong>
     </dt>
@@ -1989,6 +3249,81 @@
     <ul>
         <li><span class="parameter">display</span>
          The display to set
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "ResizeWindow"></a>
+    <strong>ResizeWindow (display, w, width, height)</strong>
+    </dt>
+    <dd>
+    Resizes a window.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">w</span>
+         The window to resize
+        </li>
+        <li><span class="parameter">width</span>
+         The new width of the window
+        </li>
+        <li><span class="parameter">height</span>
+         The new height of the window
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "RestackWindows"></a>
+    <strong>RestackWindows (display, windows)</strong>
+    </dt>
+    <dd>
+    Restacks a list of windows from top to bottom.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">windows</span>
+         The windows to restack
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "SendEvent"></a>
+    <strong>SendEvent (display, event)</strong>
+    </dt>
+    <dd>
+    Adds an event to the end of the queue.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">event</span>
+         The event to add
         </li>
     </ul>
 
@@ -2053,6 +3388,158 @@
 
 </dd>
     <dt>
+    <a name = "SubImage"></a>
+    <strong>SubImage (ximage, x, y, width, height)</strong>
+    </dt>
+    <dd>
+    Creates a subimage of another image.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">ximage</span>
+         The image to subimage
+        </li>
+        <li><span class="parameter">x</span>
+         The X coordinate of the subimage
+        </li>
+        <li><span class="parameter">y</span>
+         The Y coordinate of the subimage
+        </li>
+        <li><span class="parameter">width</span>
+         The width of the subimage
+        </li>
+        <li><span class="parameter">height</span>
+         The height of the subimage
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+
+        A new image with the contents of a rectange in the original
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "Sync"></a>
+    <strong>Sync (display, discard)</strong>
+    </dt>
+    <dd>
+    Flushes the output buffer to the display.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to flush
+        </li>
+        <li><span class="parameter">discard</span>
+         Whether to discard all events in the queue (defaults to false)
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "TextWidth"></a>
+    <strong>TextWidth (font_struct, str)</strong>
+    </dt>
+    <dd>
+    Returns the width of a string.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">font_struct</span>
+         The font to use
+        </li>
+        <li><span class="parameter">str</span>
+         The string to check
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+
+        The width of the string in pixels
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "TranslateCoordinates"></a>
+    <strong>TranslateCoordinates (display, src_w, dest_w, src_x, src_y)</strong>
+    </dt>
+    <dd>
+    Translates the coordinates in one window to coordinates in another window.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">src_w</span>
+         The source window
+        </li>
+        <li><span class="parameter">dest_w</span>
+         The destination window
+        </li>
+        <li><span class="parameter">src_x</span>
+         The source X coordinate
+        </li>
+        <li><span class="parameter">src_y</span>
+         The source Y coordinate
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+        <li>
+        The destination X coordinate (nil on error)</li>
+        <li>
+        The destination Y coordinate</li>
+        <li>
+        Whether the destination is a child of the source</li>
+    </ol>
+
+
+
+
+</dd>
+    <dt>
+    <a name = "UninstallColormap"></a>
+    <strong>UninstallColormap (display, colormap)</strong>
+    </dt>
+    <dd>
+    Resets the colormap on a display.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to modify
+        </li>
+        <li><span class="parameter">colormap</span>
+         The colormap to uninstall
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
     <a name = "UnloadFont"></a>
     <strong>UnloadFont (display, font)</strong>
     </dt>
@@ -2070,6 +3557,103 @@
         </li>
     </ul>
 
+
+
+
+
+</dd>
+    <dt>
+    <a name = "UnlockDisplay"></a>
+    <strong>UnlockDisplay (display)</strong>
+    </dt>
+    <dd>
+    Unlocks a previously locked display.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to unlock
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "UnmapSubwindows"></a>
+    <strong>UnmapSubwindows (display, w)</strong>
+    </dt>
+    <dd>
+    Unmaps all subwindows of a window.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">w</span>
+         The window to unmap the subwindows of
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "UnmapWindow"></a>
+    <strong>UnmapWindow (display, w)</strong>
+    </dt>
+    <dd>
+    Unmaps a window from a display.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">w</span>
+         The window to unmap
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "WindowEvent"></a>
+    <strong>WindowEvent (display, w, event_mask)</strong>
+    </dt>
+    <dd>
+    Waits until an event matching a window and event mask is queued.
+
+
+    <h3>Parameters:</h3>
+    <ul>
+        <li><span class="parameter">display</span>
+         The display to use
+        </li>
+        <li><span class="parameter">w</span>
+         The window to scan for
+        </li>
+        <li><span class="parameter">event_mask</span>
+         A list of events to allow for, or nil to allow all
+        </li>
+    </ul>
+
+    <h3>Returns:</h3>
+    <ol>
+
+        The event that matches
+    </ol>
 
 
 
@@ -2115,6 +3699,9 @@
         </li>
         <li><span class="parameter">BadImage</span>
         Invalid image
+        </li>
+        <li><span class="parameter">WTF</span>
+        Should never happen
         </li>
     </ul>
 
@@ -2414,6 +4001,88 @@
 
 
 </dd>
+    <dt>
+    <a name = "Queued"></a>
+    <strong>Queued</strong>
+    </dt>
+    <dd>
+    Modes to check the number of events in the queue
+
+
+    <h3>Fields:</h3>
+    <ul>
+        <li><span class="parameter">Already</span>
+        Number of events already in the queue
+        </li>
+        <li><span class="parameter">AfterFlush</span>
+        Flushes the output buffer and waits for events
+        </li>
+        <li><span class="parameter">AfterReading</span>
+        Waits for events
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
+    <dt>
+    <a name = "KeyMask"></a>
+    <strong>KeyMask</strong>
+    </dt>
+    <dd>
+    Button mask
+
+
+    <h3>Fields:</h3>
+    <ul>
+        <li><span class="parameter">Shift</span>
+
+        </li>
+        <li><span class="parameter">Lock</span>
+
+        </li>
+        <li><span class="parameter">Control</span>
+
+        </li>
+        <li><span class="parameter">Alt</span>
+
+        </li>
+        <li><span class="parameter">Mod2</span>
+
+        </li>
+        <li><span class="parameter">Mod3</span>
+
+        </li>
+        <li><span class="parameter">Mod4</span>
+
+        </li>
+        <li><span class="parameter">Mod5</span>
+
+        </li>
+        <li><span class="parameter">Button1</span>
+
+        </li>
+        <li><span class="parameter">Button2</span>
+
+        </li>
+        <li><span class="parameter">Button3</span>
+
+        </li>
+        <li><span class="parameter">Button4</span>
+
+        </li>
+        <li><span class="parameter">Button5</span>
+
+        </li>
+    </ul>
+
+
+
+
+
+</dd>
 </dl>
 
 
@@ -2421,7 +4090,7 @@
 </div> <!-- id="main" -->
 <div id="about">
 <i>generated by <a href="http://github.com/stevedonovan/LDoc">LDoc 1.4.6</a></i>
-<i style="float:right;">Last updated 2019-06-19 00:50:03 </i>
+<i style="float:right;">Last updated 2019-07-01 01:15:40 </i>
 </div> <!-- id="about" -->
 </div> <!-- id="container" -->
 </body>
