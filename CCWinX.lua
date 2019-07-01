@@ -24,6 +24,7 @@ local locked_displays = {}
 local fonts = {}
 local font_dirs = {"CCWinX/fonts"}
 local screensaver = {timeout = 900, interval = 0, prefer_blanking = true, allow_exposures = false}
+local event_queue = {}
 local api_get_dir = nil
 local api_get_local = true
 local threads_enabled = false
@@ -188,18 +189,12 @@ local function readBDFFont(str)
     end
     return retval
 end
+-- end BDF parser
 
-local function qs(tab)
-    if (type(tab) ~= "table" and type(tab) ~= "function") or kernel or true then return tab end
-    if type(tab) == "function" then return nil end
-    local retval = {}
-    for k,v in pairs(tab) do retval[qs(k)] = qs(v) end
-    return retval
-end
-
-local function sendEvent(...) if kernel then kernel.broadcast(...) else os.queueEvent(...) end end
+-- return arguments
 local function retf(...) return ... end
 
+-- parse bitmap to pixmap
 local function parseBitmap(data, width, height)
     local retval = {}
     local i = 1
@@ -219,8 +214,10 @@ local function parseBitmap(data, width, height)
     return retval, width, height
 end
 
+-- convert color string to color
 local function pcolor(p) return paintutils.parseImage(p)[1][1] end
 
+-- parse BLittle to pixmap
 local function parseBLT(data, width, height)
     local retval = {}
     for y,text in pairs(data[1]) do
@@ -249,6 +246,7 @@ local function parseBLT(data, width, height)
     return retval, data.width, data.height
 end
 
+-- parse CCGraphics to pixmap
 local function parseCCG(data, width, height) --[[ TODO: fix this
     local retval_r = {}
     for y,text in pairs(data) do
@@ -277,6 +275,7 @@ local function parseCCG(data, width, height) --[[ TODO: fix this
     return retval, data.]]
 end
 
+-- parse GIF to pixmap
 local function parseGIF(data, width, height)
     if bbpack == nil then
         log:debug("Attempting to load bbpack API")
@@ -394,11 +393,13 @@ local function parseGIF(data, width, height)
     return retval, img.width, img.height
 end
 
+-- parse paint format to pixmap
 local function parseNFP(data, width, height)
     local retval = paintutils.parseImage(data)
     return retval, #retval[1], #retval
 end
 
+-- parse paint format to pixmap and scale
 local function scaleNFP(data, width, height)
     local img, w, h = paintutils.parseImage(data)
     local retval = {}
@@ -410,6 +411,7 @@ local function scaleNFP(data, width, height)
     return retval, w*6, h*9
 end
 
+-- parse BLittle format to pixmap and scale
 local function scaleBLT(data, width, height)
     local img, w, h = parseBLT(data, width, height)
     local retval = {}
@@ -424,6 +426,7 @@ local function scaleBLT(data, width, height)
     return retval, w*2, h*2
 end
 
+-- parse CCGraphics format to pixmap and scale
 local function scaleCCG(data, width, height)
     local img, w, h = parseCCG(data, width, height)
     local retval = {}
@@ -438,14 +441,75 @@ local function scaleCCG(data, width, height)
     return retval, w*2, h*2
 end
 
+-- check if display is locked
 local function isLocked(display)
     if not threads_enabled then return false end
     for k,v in pairs(locked_displays) do if display.id == v.id and client == v.client then return true end end
     return false
 end
 
+-- check what window was hit
 local function hitTest(win, x, y)
+    for k,v in pairs(win.children) do
+        local retval, px, py = hitTest(v, x - win.frame.x, y - win.frame.y)
+        if retval then return retval, px, py end
+    end
+    if x < win.frame.x or y < win.frame.y or x > win.frame.x + win.frame.width or y > win.frame.y + win.frame.height then return nil
+    else return win, x, y end
+end
 
+local modifiers = 0x0
+
+-- convert CC event to CCWinX event
+local function handleEvent(display, ev, ...)
+    local argv = {...}
+    if display.screensaver_coro ~= nil then
+        coroutine.resume(display.screensaver_coro)
+        if coroutine.status(display.screensaver_coro) ~= "suspended" then
+            display.screensaver_coro = nil
+            display.screensaver_timer = os.startTimer(screensaver.timeout)
+        end
+    end
+    if ev == "key" then 
+        if argv[1] == keys.leftCtrl or argv[1] == keys.rightCtrl then modifiers = bit.bor(modifiers, 0x1)
+        elseif argv[1] == keys.capsLock then modifiers = bit.bxor(modifiers, 0x2)
+        elseif argv[1] == keys.leftAlt or argv[1] == keys.rightAlt then modifiers = bit.bor(modifiers, 0x4)
+        elseif argv[1] == keys.leftShift or argv[1] == keys.rightShift then modifiers = bit.bor(modifiers, 0x8) end
+        CCWinX.QueueEvent(0, "KeyPress", _PID or 0, false, display, os.epoch("utc"), modifiers, argv[1])
+    elseif ev == "key_up" then
+        if argv[1] == keys.leftCtrl or argv[1] == keys.rightCtrl then modifiers = bit.band(modifiers, bit.bnot(0x1))
+        elseif argv[1] == keys.leftAlt or argv[1] == keys.rightAlt then modifiers = bit.band(modifiers, bit.bnot(0x4))
+        elseif argv[1] == keys.leftShift or argv[1] == keys.rightShift then modifiers = bit.band(modifiers, bit.bnot(0x8)) end
+        CCWinX.QueueEvent(0, "KeyRelease", _PID or 0, false, display, display.root, os.epoch("utc"), modifiers, argv[1])
+    elseif ev == "mouse_click" then
+        local hit, px, py = hitTest(display.root, argv[2], argv[3])
+        CCWinX.QueueEvent(0, "ButtonPress", _PID or 0, false, display, hit, display.root, os.epoch("utc"), px, py, argv[2], argv[3], bit.bor(modifiers, bit.blshift(1, argv[1] + 7)), argv[1])
+    elseif ev == "mouse_up" then
+        local hit, px, py = hitTest(display.root, argv[2], argv[3])
+        CCWinX.QueueEvent(0, "ButtonRelease", _PID or 0, false, display, hit, display.root, os.epoch("utc"), px, py, argv[2], argv[3], bit.band(modifiers, bit.bnot(bit.blshift(1, argv[1] + 7))), argv[1])
+    elseif ev == "mouse_drag" then
+        local hit, px, py = hitTest(display.root, argv[2], argv[3])
+        CCWinX.QueueEvent(0, "MotionNotify", _PID or 0, false, display, hit, display.root, os.epoch("utc"), px, py, argv[2], argv[3], bit.bor(modifiers, bit.blshift(1, argv[1] + 7)), argv[1])
+    elseif ev == "mouse_scroll" then
+        local hit, px, py = hitTest(display.root, argv[2], argv[3])
+        CCWinX.QueueEvent(0, "ButtonPress", _PID or 0, false, display, hit, display.root, os.epoch("utc"), px, py, argv[2], argv[3], bit.bor(modifiers, bit.blshift(1, argv[1] / 2 + 11.5)), argv[1])
+        CCWinX.QueueEvent(0, "ButtonRelease", _PID or 0, false, display, hit, display.root, os.epoch("utc"), px, py, argv[2], argv[3], bit.band(modifiers, bit.bnot(bit.blshift(1, argv[1] / 2 + 11.5))), argv[1])
+    elseif ev == "monitor_touch" and argv[1] == display.id then
+        argv[1] = 1
+        local hit, px, py = hitTest(display.root, argv[2], argv[3])
+        CCWinX.QueueEvent(0, "ButtonPress", _PID or 0, false, display, hit, display.root, os.epoch("utc"), px, py, argv[2], argv[3], bit.bor(modifiers, bit.blshift(1, argv[1] + 7)), argv[1])
+    elseif ev == "timer" then
+        if display.screensaver_timer == args[1] then 
+            display.screensaver_timer = nil
+            display.screensaver_coro = coroutine.create(CCWinX.ActivateScreenSaver)
+            coroutine.resume(display.screensaver_coro, _PID, v, true)
+        end
+        return
+    else return end
+    if screensaver.timeout ~= 0 then
+        os.cancelTimer(display.screensaver_timer)
+        display.screensaver_timer = os.startTimer(screensaver.timeout)
+    end
 end
 
 -- Beginning of public API
@@ -572,13 +636,37 @@ Fill = {
     Stippled = 3
 }
 
+--- Modes to check the number of events in the queue
+Queued = {
+    Already = 0, -- Number of events already in the queue
+    AfterFlush = 1, -- Flushes the output buffer and waits for events
+    AfterReading = 2 -- Waits for events
+}
+
+--- Button mask
+KeyMask = {
+    Shift = 0x1,
+    Lock = 0x2,
+    Control = 0x4,
+    Alt = 0x8,
+    Mod2 = 0x10,
+    Mod3 = 0x20,
+    Mod4 = 0x40,
+    Mod5 = 0x80,
+    Button1 = 0x100,
+    Button2 = 0x200,
+    Button3 = 0x400,
+    Button4 = 0x800,
+    Button5 = 0x1000
+}
+
 --- Activates the screen saver.
 -- This function will block until a keyboard/mouse event occurs, run this in a coroutine to allow background processing.
 -- On CCKernel, the server *does* run this in a coroutine.
 -- @param display The display to suspend
 -- @param no_queue Set to true to not queue events while exposing (use in a coroutine)
 function CCWinX.ActivateScreenSaver(client, display, no_queue)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     local w, h = display.getSize()
     if screensaver.prefer_blanking then display.clear()
     elseif screensaver.allow_exposures then
@@ -609,27 +697,91 @@ function CCWinX.ChangeGC(client, display, gc, values) for k,v in pairs(values) d
 -- @param w The window to modify
 -- @param attributes A table of attributes to modify
 function CCWinX.ChangeWindowAttributes(client, display, w, attributes)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(w) ~= "table" or w.attributes == nil then return Error.BadWindow end
     for k,v in pairs(attributes) do w.attributes[k] = v end
+end
+
+--- Checks if an event matching a function is in the queue.
+-- @param display The display to use
+-- @param predicate The function to call of prototype `function predicate(arg: any, event: table) -> boolean`
+-- @param arg An argument to pass to predicate
+-- @return Whether a match was found
+-- @return The first event that matches
+-- @see CCWinX.IfEvent
+function CCWinX.CheckIfEvent(client, display, predicate, arg) 
+    for k,v in pairs(event_queue) do if predicate(arg, v) then return true, table.remove(event_queue, k) end end 
+    return false
+end
+
+--- Checks if an event matching any type in a list is in the queue.
+-- @param display The display to use
+-- @param event_mask A list of events to match
+-- @return Whether a match was found
+-- @return The event found
+-- @see CCWinX.MaskEvent
+function CCWinX.CheckMaskEvent(client, display, event_mask)
+    for k,v in pairs(event_queue) do for l,w in pairs(event_mask) do if v[1] == w then return true, table.remove(event_queue, k) end end end
+    return false
+end
+
+--- Checks if an event matching a type is in the queue.
+-- @param display The display to use
+-- @param event_type The type of event to match
+-- @return Whether a match was found
+-- @return The event found
+-- @see CCWinX.TypedEvent
+function CCWinX.CheckTypedEvent(client, display, event_type)
+    for k,v in pairs(event_queue) do if v[1] == event_type then return true, table.remove(event_queue, k) end end
+    return false
+end
+
+--- Checks if an event matching a window and event type is in the queue.
+-- @param display The display to use
+-- @param w The window to scan for
+-- @param event_type The event type to match
+-- @return Whether a match was found
+-- @return The event found
+-- @see CCWinX.TypedWindowEvent
+function CCWinX.CheckTypedWindowEvent(client, display, w, event_type)
+    for k,v in pairs(event_queue) do if v[1] == event_type then for l,x in pairs(v) do if w == x then return true, table.remove(event_queue, k) end end end end
+    return false
+end
+
+--- Checks if an event matching a window and event mask is in the queue.
+-- @param display The display to use
+-- @param w The window to scan for
+-- @param event_mask A list of events to allow for, or nil to allow all
+-- @return Whether a match was found
+-- @return The event that matches
+-- @see CCWinX.WindowEvent
+function CCWinX.CheckWindowEvent(client, display, w, event_mask)
+    for k,v in pairs(event_queue) do
+        local good = event_mask ~= nil
+        if event_mask ~= nil then for l,x in pairs(event_mask) do if x == v[1] then good = true end end end
+        if good then for l,x in pairs(v) do if w == x then return true, table.remove(event_queue, k) end end end
+    end
+    return false
 end
 
 --- Moves the top child of a window to the bottom.
 -- @param display The display for the window
 -- @param w The window to change the children of
 function CCWinX.CirculateSubwindowsDown(client, display, w)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(w) ~= "table" or w.children == nil then return Error.BadWindow end
     table.insert(w.children, table.remove(w.children, 1))
+    CCWinX.QueueEvent(client, "CirculateNotify", client, false, display, w.parent, w, false)
 end
 
 --- Moves the bottom child of a window to the top.
 -- @param display The display for the window
 -- @param w The window to change the children of
 function CCWinX.CirculateSubwindowsUp(client, display, w)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(w) ~= "table" or w.children == nil then return Error.BadWindow end
     table.insert(w.children, 1, table.remove(w.children, table.maxn(w.children)))
+    CCWinX.QueueEvent(client, "CirculateNotify", client, false, display, w.parent, w, true)
 end
 
 --- Moves the bottom or top child of a window to the top or bottom, respectively.
@@ -637,7 +789,7 @@ end
 -- @param w The window to change the children of
 -- @param up Whether to go up (true) or down (false)
 function CCWinX.CirculateSubwindows(client, display, w, up)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if up then return CCWinX.CirculateSubwindowsUp(client, display, w) 
     else return CCWinX.CirculateSubwindowsDown(client, display, w) end
 end
@@ -651,20 +803,20 @@ end
 -- @param height The height of the area
 -- @param exposures Whether to queue an Expose event
 function CCWinX.ClearArea(client, display, w, x, y, width, height, exposures)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(w) ~= "table" or w.frame == nil or w.buffer == nil then return Error.BadWindow end
     if x + width > w.frame.width or y + height > w.frame.height then return Error.BadValue end
     for py = y, y + height do for px = x, x + width do
         w.setPixel(px, py, w.default_color)
     end end
-    if exposures then sendEvent("Expose", client, false, qs(display), qs(w), x, y, width, height, 0) end
+    if exposures then CCWinX.QueueEvent(client, "Expose", client, false, qs(display), qs(w), x, y, width, height, 0) end
 end
 
 --- Clears an entire window.
 -- @param display The display for the window
 -- @param w The window to clear
 function CCWinX.ClearWindow(client, display, w)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(w) ~= "table" or w.clear == nil or w.buffer == nil then return Error.BadWindow end
     w.clear()
 end
@@ -673,7 +825,7 @@ end
 -- @param disp The display object
 -- @return Whether the command succeeded
 function CCWinX.CloseDisplay(client, disp)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(disp) ~= "table" then
         log:error("Type error at CloseDisplay (#1): expected table, got " .. type(disp))
         return false
@@ -712,7 +864,7 @@ end
 -- @param w The window to modify
 -- @param values The changes to make as table {x, y, width, height, border_width, sibling, stack_mode}
 function CCWinX.ConfigureWindow(client, display, w, values)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(w) ~= "table" or w.frame == nil or w.border == nil or w.parent == nil then return Error.BadWindow end
     if values.x ~= nil or values.y ~= nil or values.border_width ~= nil then
         w.frame.x = values.x or w.frame.x
@@ -822,6 +974,7 @@ function CCWinX.ConfigureWindow(client, display, w, values)
             end
         end
     end
+    CCWinX.QueueEvent(client, "ConfigureNotify", client, false, display, w.parent, w, w.frame.x, w.frame.y, w.frame.width, w.frame.height, w.border.width, values.sibling)
 end
 
 local function copyop(src, dst, func)
@@ -856,7 +1009,7 @@ end
 -- @param dest_x The destination X coordinate
 -- @param dest_y The destination Y coordinate
 function CCWinX.CopyArea(client, display, src, dest, gc, src_x, src_y, width, height, dest_x, dest_y)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(src) ~= "table" 
         or type(dest) ~= "table" 
         or src.setPixel == nil 
@@ -894,8 +1047,6 @@ function CCWinX.CreateColormap(client, display)
     end end
     return retval
 end
-
-local default_colormap = CCWinX.CreateColormap(0, term.native())
 
 --- Creates a new graphics context.
 -- @param display The display to use
@@ -952,7 +1103,7 @@ end
 -- @param height The height of the pixmap
 -- @return A new pixmap
 function CCWinX.CreatePixmap(client, display, d, width, height)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if width < 1 or height < 1 then return Error.BadValue end
     local retval = {}
     retval.client = client
@@ -991,7 +1142,7 @@ end
 -- @param background The color of the background
 -- @return A window object
 function CCWinX.CreateSimpleWindow(client, display, parent, x, y, width, height, border_width, border, background)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(parent) ~= "table" 
         or parent.default_color == nil 
         or parent.border == nil 
@@ -1045,7 +1196,7 @@ function CCWinX.CreateSimpleWindow(client, display, parent, x, y, width, height,
     end
     retval.clear()
     table.insert(parent.children, 1, retval)
-    sendEvent("CreateNotify", client, false, qs(display), qs(parent), qs(retval), x, y, width, height, border_width, retval.attributes.override_redirect)
+    CCWinX.QueueEvent(client, "CreateNotify", client, false, display, parent, retval, x, y, width, height, border_width)
     return retval
 end
 
@@ -1061,7 +1212,7 @@ end
 -- @param attributes A table of attributes applied to the window.
 -- @return A window object
 function CCWinX.CreateWindow(client, display, parent, x, y, width, height, border_width, class, attributes)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if x + width > parent.frame.width or y + height > parent.frame.height then
         return Error.BadValue
     end
@@ -1111,7 +1262,7 @@ function CCWinX.CreateWindow(client, display, parent, x, y, width, height, borde
     end
     retval.clear()
     table.insert(parent.children, 1, retval)
-    sendEvent("CreateNotify", client, false, display, parent, retval, x, y, width, height, border_width, retval.attributes.override_redirect)
+    CCWinX.QueueEvent(client, "CreateNotify", client, false, display, parent, retval, x, y, width, height, border_width)
     return retval
 end
 
@@ -1139,8 +1290,28 @@ function CCWinX.DefaultColormap()
         black = rgbtab(0x191919)
     }
 end
-
 CCWinX.DefaultColormapOfScreen = CCWinX.DefaultColormap
+
+--- Returns the default graphics context.
+-- @return The default graphics context
+function CCWinX.DefaultGC() return {
+    ["function"] = GCFunc.GXcopy,
+    foreground = colors.white,
+    background = colors.black,
+    line_width = 0,
+    line_style = Line.Solid,
+    cap_style = Cap.Butt,
+    join_style = Join.Miter,
+    fill_style = Fill.Solid,
+    fill_rule = false,
+    arc_mode = false,
+    font = 1,
+    subwindow_mode = false,
+    graphics_exposures = True,
+    dash_offset = 0,
+    dashes = {4, 4}
+} end
+CCWinX.DefaultGCOfScreen = CCWinX.DefaultGC
 
 --- Returns the root window for the display.
 -- @param display The display to check
@@ -1158,7 +1329,7 @@ function CCWinX.DefaultScreen(client, display) return display.id end
 -- @param display The display for the window
 -- @param w The window to destroy the children of
 function CCWinX.DestroySubwindows(client, display, w)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(w) ~= "table" or w.children == nil then return Error.BadWindow end
     local delete = {}
     for k,v in pairs(w.children) do delete[k] = v end
@@ -1173,7 +1344,7 @@ end
 -- @param display The display for the window
 -- @param w The window to destroy
 function CCWinX.DestroyWindow(client, display, w)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(w) ~= "table" or w.parent == nil then return Error.BadWindow end
     local r = CCWinX.DestroySubwindows(client, display, w)
     if r then return r end
@@ -1181,21 +1352,25 @@ function CCWinX.DestroyWindow(client, display, w)
         table.remove(w.parent.children, k)
         break
     end end
-    sendEvent("DestroyNotify", client, false, qs(display), qs(w.parent), qs(w))
+    CCWinX.QueueEvent(client, "DestroyNotify", client, false, display, w.parent, w)
     local keys = {}
     for k,v in pairs(w) do table.insert(keys, k) end
     for _,k in pairs(keys) do w[k] = nil end
 end
 
---- Returns the width of a display.
--- @param display The display to check
--- @return The width of the display
-function CCWinX.DisplayWidth(client, display) return display.root and display.root.frame.width end
-
 --- Returns the height of a display.
 -- @param display The display to check
 -- @return The height of the display
 function CCWinX.DisplayHeight(client, display) return display.root and display.root.frame.height end
+
+--- Returns the ID of the display.
+-- @return The ID passed to CCWinX.OpenDisplay()
+function CCWinX.DisplayString(client, display) return type(display) == "table" and display.id end
+
+--- Returns the width of a display.
+-- @param display The display to check
+-- @return The width of the display
+function CCWinX.DisplayWidth(client, display) return display.root and display.root.frame.width end
 
 --- Draws a polygon or curve from a list of vertices. (WIP)
 -- @param display The display to use
@@ -1203,7 +1378,7 @@ function CCWinX.DisplayHeight(client, display) return display.root and display.r
 -- @param gc The graphics context to use
 -- @param vlist The list of vertices (vertex = table {x, y, flags})
 function CCWinX.Draw(client, display, d, vlist)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(d) ~= "table" or type(vlist) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
     local lastx, lasty = 0, 0
     local lastv = table.remove(vlist, 1)
@@ -1258,7 +1433,7 @@ end
 -- @param angle1 The start of the arc relative to the three-o'clock position from the center in degrees
 -- @param angle2 The number of degrees of the arc relative to the start
 function CCWinX.DrawArc(client, display, d, gc, x, y, width, height, angle1, angle2)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
     if x + width > d.frame.width or y + height > d.frame.height then return Error.BadMatch end
     if type(gc) ~= "table" or gc.foreground == nil then return Error.BadGC end
@@ -1290,7 +1465,7 @@ end
 -- @param gc The graphics context to use
 -- @param arcs The list of arcs
 function CCWinX.DrawArcs(client, display, d, gc, arcs)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     for k,v in pairs(arcs) do
         local r = CCWinX.DrawArc(client, display, d, gc, v.x, v.y, v.width, v.height, v.angle1, v.angle2)
         if r then return r end
@@ -1305,7 +1480,7 @@ end
 -- @param y The Y coordinate of the text
 -- @param text The text to write
 function CCWinX.DrawImageString(client, display, d, gc, x, y, text)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(gc) ~= "table" or gc.font == nil then return Error.BadGC end
     local err, ascent, descent, overall = CCWinX.QueryTextExtents(client, display, gc.font, text)
     if type(err) == "number" then return err end
@@ -1322,7 +1497,7 @@ end
 -- @param x2 The end X coordinate
 -- @param y2 The end Y coordinate
 function CCWinX.DrawLine(client, display, d, gc, x1, y1, x2, y2)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
     if x1 > d.frame.width or x2 > d.frame.width or y1 > d.frame.height or y2 > d.frame.height then return Error.BadMatch end
     if type(gc) ~= "table" or gc.foreground == nil or gc.line_style == nil or gc.dashes == nil then return Error.BadGC end
@@ -1347,7 +1522,7 @@ end
 -- @param gc The graphics context to use
 -- @param lines The list of lines
 function CCWinX.DrawLines(client, display, d, gc, lines)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     for k,v in pairs(lines) do
         local r = CCWinX.DrawLine(client, display, d, gc, v.x1, v.y1, v.x2, v.y2)
         if r then return r end
@@ -1361,7 +1536,7 @@ end
 -- @param x The X coordinate of the point
 -- @param y The Y coordinate of the point
 function CCWinX.DrawPoint(client, display, d, gc, x, y)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
     if x > d.frame.width or y > d.frame.height then return Error.BadMatch end
     if type(gc) ~= "table" or gc.foreground == nil then return Error.BadGC end
@@ -1374,7 +1549,7 @@ end
 -- @param gc The graphics context to use
 -- @param points The list of points
 function CCWinX.DrawPoints(client, display, d, gc, points)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     for k,v in pairs(points) do
         local r = CCWinX.DrawPoint(client, display, d, gc, v.x, v.y)
         if r then return r end
@@ -1390,7 +1565,7 @@ end
 -- @param width The width of the rectangle
 -- @param height The height of the rectangle
 function CCWinX.DrawRectangle(client, display, d, gc, x, y, width, height)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
     if x + width > d.frame.width or y + height > d.frame.height then return Error.BadMatch end
     if type(gc) ~= "table" or gc.foreground == nil then return Error.BadGC end
@@ -1408,7 +1583,7 @@ end
 -- @param gc The graphics context to use
 -- @param rectangles The list of rectangles
 function CCWinX.DrawRectangles(client, display, d, gc, rectangles)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     for k,v in pairs(rectangles) do
         local r = CCWinX.DrawRectangle(client, display, d, gc, v.x, v.y, v.width, v.height)
         if r then return r end
@@ -1423,7 +1598,7 @@ end
 -- @param y The Y coordinate of the text
 -- @param text The text to draw
 function CCWinX.DrawString(client, display, d, gc, x, y, text)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
     if type(gc) ~= "table" or gc.foreground == nil or gc.font == nil then return Error.BadGC end
     if fonts[gc.font] == nil then return Error.BadFont end
@@ -1446,7 +1621,7 @@ end
 -- @param y The initial Y coordinate
 -- @param items The text items to write
 function CCWinX.DrawText(client, display, d, gc, x, y, items)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     local newgc = CCWinX.CreateGC(client, display, d, gc)
     if type(newgc) == "number" then return newgc end
     for _,item in pairs(items) do
@@ -1457,12 +1632,18 @@ function CCWinX.DrawText(client, display, d, gc, x, y, items)
     end
 end
 
---- Either activates or deactivates a screensaver.
--- Will block if activating screen saver, use coroutine to run in background.
--- If deactivating and 
--- @param display The display to set
--- @param mode true to activate, false to deactivate
-function CCWinX.ForceScreenSaver(client, display, mode) if mode then CCWinX.ActivateScreenSaver(client, display) else CCWinX.ResetScreenSaver(client, display) end end
+--- Returns the number of events in the event queue depending on the mode.
+-- @param display The display to use
+-- @param mode The mode to use
+-- @return The number of events in the queue
+-- @see Queued
+function CCWinX.EventsQueued(client, display, mode)
+    if mode ~= Queued.Already and #event_queue < 1 then
+        if mode == Queued.AfterFlush then CCWinX.Flush(display) end
+        while #event_queue < 1 do handleEvent(display, os.pullEvent()) end
+    end
+    return #event_queue
+end
 
 --- Fills a rectangle.
 -- @param display The display to use
@@ -1473,7 +1654,7 @@ function CCWinX.ForceScreenSaver(client, display, mode) if mode then CCWinX.Acti
 -- @param width The width of the rectangle
 -- @param height The height of the rectangle
 function CCWinX.FillRectangle(client, display, d, gc, x, y, width, height)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(gc) ~= "table" or gc.foreground == nil then return Error.BadGC end
     if type(d) ~= "table" or d.setPixel == nil or d.frame == nil then return Error.BadDrawable end
     if x + width > d.frame.width or y + height > d.frame.height then return Error.BadMatch end
@@ -1486,7 +1667,7 @@ end
 -- @param gc The graphics context to use
 -- @param rectangles The list of rectangles
 function CCWinX.FillRectangles(client, display, d, gc, rectangles)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     for k,v in pairs(rectangles) do
         local r = CCWinX.FillRectangle(client, display, d, gc, v.x, v.y, v.width, v.height)
         if r then return r end
@@ -1496,9 +1677,16 @@ end
 --- Redraws all windows on a display.
 -- @param display The display to redraw
 function CCWinX.Flush(client, display) 
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     display.root.draw() 
 end
+
+--- Either activates or deactivates a screensaver.
+-- Will block if activating screen saver, use coroutine to run in background.
+-- If deactivating and 
+-- @param display The display to set
+-- @param mode true to activate, false to deactivate
+function CCWinX.ForceScreenSaver(client, display, mode) if mode then CCWinX.ActivateScreenSaver(client, display) else CCWinX.ResetScreenSaver(client, display) end end
 
 --- Returns a property set on the display's database.
 -- @param display The display to use
@@ -1531,7 +1719,7 @@ function CCWinX.GetFontPath() return font_dirs end
 -- @param height The height of the subimage
 -- @param plane_mask A bitmask of the colors to copy (default is all/0xFFFF)
 function CCWinX.GetImage(client, display, d, x, y, width, height, plane_mask)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     plane_mask = plane_mask or 0xFFFF
     local tmp = CCWinX.CreatePixmap(client, display, d, width, height)
     if type(tmp) == "number" then return tmp end
@@ -1546,7 +1734,7 @@ end
 -- @return The color of the pixel or nil
 -- @return If the first return value is nil, this value is the error code.
 function CCWinX.GetPixel(client, ximage, x, y)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(ximage) ~= "table" or ximage.data == nil then return nil, Error.BadImage end
     if ximage.data[y] == nil or ximage.data[y][x] == nil then return nil, Error.BadMatch end
     return ximage.data[y][x]
@@ -1571,7 +1759,7 @@ function CCWinX.GetScreenSaver() return screensaver.timeout, screensaver.interva
 -- @param dest_x The X coordinate of the destination
 -- @param dest_y The Y coordinate of the destination
 function CCWinX.GetSubImage(client, display, d, x, y, width, height, plane_mask, dest_image, dest_x, dest_y)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     plane_mask = plane_mask or 0xFFFF
     local tmp = CCWinX.CreatePixmap(client, display, d, width, height)
     if type(tmp) == "number" then return tmp end
@@ -1580,15 +1768,29 @@ function CCWinX.GetSubImage(client, display, d, x, y, width, height, plane_mask,
     for y,r in pairs(tmp.buffer) do for x,c in pairs(r) do dest_image.data[dest_y+y-1][dest_x+x-1] = c end end
 end
 
+--- Calls a function for each event, and returns the first event where the function returns true
+-- @param display The display to use
+-- @param predicate The function to call of prototype `function predicate(arg: any, event: table) -> boolean`
+-- @param arg An argument to pass to predicate
+-- @return The first event that matches
+function CCWinX.IfEvent(client, display, predicate, arg)
+    while true do
+        for k,v in pairs(event_queue) do if predicate(arg, v) then return table.remove(event_queue, k) end end
+        CCWinX.Flush(client, display)
+        handleEvent(display, os.pullEvent())
+    end
+end
+
 --- Enables multithreading support for the current CCWinX session.
 function CCWinX.InitThreads() threads_enabled = true end
 
 --- Sets a colormap onto a display.
 -- @param display The display to set
 -- @param colormap The colormap to use
-function CCWinX.InstallColormap(client, display, colormap)
-    while isLocked(client, display) do os.pullEvent() end
+function CCWinX.InstallColormap(client, display, colormap, skipevent)
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     for k,v in pairs(colors) do display.setPaletteColor(colors[k], v.r / 255, v.g / 255, v.b / 255) end
+    if not skipevent then CCWinX.QueueEvent(client, "ColormapNotify", client, false, display, colormap, true) end
 end
 
 --- Sends SIGINT to a client using a resource that has a client ID.
@@ -1640,7 +1842,7 @@ end
 -- @param name The name of the font
 -- @return A font ID that can be used with QueryFont
 function CCWinX.LoadFont(client, display, name)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if name == "fixed" then name = "-ComputerCraft-CraftOS-Book-R-Mono--9-90-75-75-M-90-ISO8859-1" end
     for k,font in pairs(fonts) do if string.find(font.id, string.gsub(string.gsub(string.gsub(name, "-", "%%-"), "?", "."), "*", ".*"), 1, false) then return k end end
     for _,font_dir in pairs(font_dirs) do
@@ -1697,7 +1899,7 @@ end
 -- @param display The display to use
 -- @param w The window to lower
 function CCWinX.LowerWindow(client, display, w)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(w) ~= "table" or w.parent == nil or w.parent.children == nil then return Error.BadWindow end
     for k,v in pairs(w.parent.children) do if v == w then
         table.remove(w.parent.children, k)
@@ -1720,11 +1922,23 @@ function CCWinX.MapSubwindows(client, display, w) for k,v in w.children do CCWin
 -- @param display The display to map to
 -- @param w The window to map
 function CCWinX.MapWindow(client, display, w)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(w) ~= "table" then return Error.BadMatch end 
     w.display = display 
     w.draw()
-    CCWinX.MapSubwindows(client, display, w)
+    CCWinX.QueueEvent(client, "MapNotify", client, false, display, w.parent, w)
+end
+
+--- Waits for an event matching any type in a list to be queued.
+-- @param display The display to use
+-- @param event_mask A list of events to match
+-- @return The event found
+function CCWinX.MaskEvent(client, display, event_mask)
+    while true do
+        for k,v in pairs(event_queue) do for l,w in pairs(event_mask) do if v[1] == w then return table.remove(event_queue, k) end end end
+        CCWinX.Flush(client, display)
+        handleEvent(display, os.pullEvent())
+    end
 end
 
 --- Moves and resizes a window.
@@ -1742,15 +1956,19 @@ function CCWinX.MoveResizeWindow(client, display, w, x, y, width, height) return
 -- @param x The new X coordinate of the window
 -- @param y The new Y coordinate of the window
 function CCWinX.MoveWindow(client, display, w, x, y)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(w) ~= "table" or w.frame == nil or w.draw == nil then return Error.BadWindow end
     w.frame.x = x
     w.frame.y = y
 end
 
+--- Returns the next event in the queue.
+-- @return The next event in the queue
+function CCWinX.NextEvent() return table.remove(event_queue, 1) end
+
 --- Does nothing.
 -- @param display The display to use
-function CCWinX.NoOp(client, display) while isLocked(client, display) do os.pullEvent() end end
+function CCWinX.NoOp(client, display) while isLocked(client, display) do handleEvent(display, os.pullEvent()) end end
 
 local function tonum_rep(str, ...) if str ~= nil then return tonumber(str), tonum_rep(...) end end
 
@@ -1789,7 +2007,8 @@ function CCWinX.OpenDisplay(client, id)
     local w, h = retval.getSize()
     
     local root = {}
-    root.owner = client
+    root.owner = _PID
+    root.isRootWindow = true
     root.display = retval
     root.frame = {}
     root.frame.x = 0
@@ -1840,11 +2059,48 @@ function CCWinX.ParseGeometry(client, parsestring)
     return x, y, tonum_rep(string.match(parsestring, "=?(%d+)[xX](%d+)"))
 end
 
+--- Returns the next event in the queue without removing it.
+-- @return The next event in the queue
+function CCWinX.PeekEvent() return event_queue[1] end
+
+--- Calls a function for each event, and returns the first event where the function returns true without removing it from the queue
+-- @param display The display to use
+-- @param predicate The function to call of prototype `function predicate(arg: any, event: table) -> boolean`
+-- @param arg An argument to pass to predicate
+-- @return The first event that matches
+function CCWinX.PeekIfEvent(client, display, predicate, arg)
+    while true do
+        for k,v in pairs(event_queue) do if predicate(arg, v) then return v end end
+        CCWinX.Flush(client, display)
+        handleEvent(display, os.pullEvent())
+    end
+end
+
 --- Returns the X protocol version implemented by CCWinX.
 function CCWinX.ProtocolVersion() return 11 end
 
--- Returns the X protocol revision implemented by CCWinX.
+--- Returns the X protocol revision implemented by CCWinX.
 function CCWinX.ProtocolRevision() return 6 end
+
+--- Returns the next event in the queue with syntax similar to os.pullEvent.
+-- @param mask The event type to match, or nil
+-- @return The type of event
+-- @return Each argument in the event
+function CCWinX.PullEvent(client, mask)
+    while true do
+        if #event_queue > 0 then
+            local ev = table.remove(event_queue, 1)
+            if mask == nil or mask == ev[1] then return table.unpack(ev) end
+        end
+        local e = {os.pullEvent()}
+        if mask == nil or mask == e[1] then return table.unpack(e) end
+    end
+end
+
+--- Places an event back at the beginning of the queue.
+-- @param display The display to use
+-- @param event The event to put back
+function CCWinX.PutBackEvent(client, display, event) table.insert(event_queue, 1, event) end
 
 --- Draws an image onto a drawable.
 -- @param display The display to use
@@ -1858,7 +2114,7 @@ function CCWinX.ProtocolRevision() return 6 end
 -- @param width The width of the subimage to draw
 -- @param height The height of the subimage to draw
 function CCWinX.PutImage(client, display, d, gc, image, src_x, src_y, dest_x, dest_y, width, height)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(d) ~= "table" or d.setPixel == nil or d.getPixel == nil or d.frame == nil then return Error.BadDrawable end
     if type(gc) ~= "table" or gc.background == nil then return Error.BadGC end
     if type(image) ~= "table" or image.data == nil or image.width == nil or image.height == nil then return Error.BadImage end
@@ -1876,6 +2132,10 @@ end
 -- @param y The Y coordinate of the pixel
 -- @param pixel The value to set to
 function CCWinX.PutPixel(client, ximage, x, y, pixel) ximage.data[y][x] = pixel end
+
+--- Returns the number of events in the queue.
+-- @return The number of events in the queue
+function CCWinX.QLength() return #event_queue end
 
 --- Returns the RGB values for a color value.
 -- @param display The display to use
@@ -1930,11 +2190,16 @@ function CCWinX.QueryTextExtents(client, display, font_ID, text)
 end
 CCWinX.TextExtents = CCWinX.QueryTextExtents
 
+--- Queues an event using a syntax similar to os.queueEvent.
+-- @param type The event type
+-- @param ... The event arguments
+function CCWinX.QueueEvent(client, type, ...) table.insert(event_queue, {type, ...}) end
+
 --- Raises a window to the top of the parent's stack.
 -- @param display The display to use
 -- @param w The window to raise
 function CCWinX.RaiseWindow(client, display, w)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(w) ~= "table" or w.parent == nil or w.parent.children == nil then return Error.BadWindow end
     for k,v in pairs(w.parent.children) do if v == w then
         table.remove(w.parent.children, k)
@@ -1943,12 +2208,36 @@ function CCWinX.RaiseWindow(client, display, w)
     table.insert(w.parent.children, 1, w)
 end
 
+--- Changes the parent of a window.
+-- @param display The display to use
+-- @param w The window to reparent
+-- @param parent The new parent window
+-- @param x The new X coordinate inside the parent
+-- @param y The new Y coordinate inside the parent
+function CCWinX.ReparentWindow(client, display, w, parent, x, y)
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
+    if type(w) ~= "table" or type(parent) ~= "table" or w.frame == nil or parent.frame == nil or w.parent == nil then return Error.BadWindow end
+    for k,v in pairs(w.parent.children) do if v == w then
+        table.remove(w.parent.children, k)
+        break
+    end end
+    local old_parent = w.parent
+    local mapped = w.display ~= nil
+    if mapped then CCWinX.UnmapWindow(client, display, w) end
+    table.insert(parent.children, 1, w)
+    w.parent = parent
+    w.frame.x = x
+    w.frame.y = y
+    CCWinX.QueueEvent(client, "ReparentNotify", client, false, display, old_parent, w, parent, x, y)
+    if mapped then CCWinX.MapWindow(client, display, w) end
+end
+
 --- Resets the screen saver.
 -- @param display The display to set
 function CCWinX.ResetScreenSaver(client, display)
-    while isLocked(client, display) do os.pullEvent() end
-    sendEvent("ForceScreenSaverReset", display.id)
-    os.pullEvent()
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
+    if kernel then kernel.broadcast("ForceScreenSaverReset", display.id) else os.queueEvent("ForceScreenSaverReset", display.id) end
+    handleEvent(display, os.pullEvent())
 end
 
 --- Resizes a window.
@@ -1957,7 +2246,7 @@ end
 -- @param width The new width of the window
 -- @param height The new height of the window
 function CCWinX.ResizeWindow(client, display, w, width, height)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(w) ~= "table" or w.frame == nil or w.parent == nil or w.buffer == nil then return Error.BadWindow end
     if height > w.frame.height then
         for y = w.frame.height + 1, height do
@@ -1990,7 +2279,7 @@ end
 -- @param display The display to use
 -- @param windows The windows to restack
 function CCWinX.RestackWindows(client, display, windows)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(windows) ~= "table" or #windows < 1 then return Error.BadValue end
     if type(windows[1]) ~= "table" or windows[1].parent == nil then return Error.BadWindow end
     for k,v in pairs(windows) do if type(v) ~= "table" or v.parent == nil then return Error.BadWindow elseif v.parent ~= windows[1].parent then return Error.BadMatch end end
@@ -2005,6 +2294,11 @@ function CCWinX.RestackWindows(client, display, windows)
     end end end end
 end
 
+--- Adds an event to the end of the queue.
+-- @param display The display to use
+-- @param event The event to add
+function CCWinX.SendEvent(client, display, event) table.insert(event_queue, event) end
+
 --- Sets the directories to search for font files.
 -- @param display The display to use
 -- @param directories The directories to search
@@ -2017,7 +2311,7 @@ function CCWinX.SetFontPath(client, display, directories) font_dirs = directorie
 -- @param prefer_blanking Whether to blank the screen for the screen saver
 -- @param allow_exposures Whether to activate randomizer screen saver
 function CCWinX.SetScreenSaver(client, display, timeout, interval, prefer_blanking, allow_exposures)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if timeout == -1 then timeout = 900
     elseif timeout < 0 then return Error.BadValue end
     screensaver = {timeout = timeout, interval = interval, prefer_blanking = prefer_blanking, allow_exposures = allow_exposures}
@@ -2049,12 +2343,9 @@ end
 -- @param display The display to flush
 -- @param discard Whether to discard all events in the queue (defaults to false)
 function CCWinX.Sync(client, display, discard)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     display.root.draw()
-    if discard then
-        os.queueEvent("SyncDiscard")
-        os.pullEvent("SyncDiscard")
-    end
+    if discard then event_queue = {} end
 end
 
 --- Returns the width of a string.
@@ -2101,7 +2392,11 @@ end
 
 --- Resets the colormap on a display.
 -- @param display The display to modify
-function CCWinX.UninstallColormap(client, display) CCWinX.InstallColormap(client, display, default_colormap) end
+-- @param colormap The colormap to uninstall
+function CCWinX.UninstallColormap(client, display, colormap)
+    CCWinX.InstallColormap(client, display, CCWinX.DefaultColormap(), true)
+    CCWinX.QueueEvent(client, "ColormapNotify", client, false, display, colormap, false)
+end
 
 --- Unloads a previously loaded font.
 -- @param display The display to use
@@ -2130,20 +2425,34 @@ end
 -- @param display The display to use
 -- @param w The window to unmap
 function CCWinX.UnmapWindow(client, display, w)
-    while isLocked(client, display) do os.pullEvent() end
+    while isLocked(client, display) do handleEvent(display, os.pullEvent()) end
     if type(w) ~= "table" or w.parent == nil then return Error.BadWindow end
     w.display = nil
     w.parent.draw()
+    CCWinX.QueueEvent(client, "UnmapNotify", client, false, display, w.parent, w, false)
 end
 
--- If run under CCKernel2 through a shell or forked: start a CCWinX server to listen to apps
+--- Waits until an event matching a window and event mask is queued.
+-- @param display The display to use
+-- @param w The window to scan for
+-- @param event_mask A list of events to allow for, or nil to allow all
+-- @return The event that matches
+function CCWinX.WindowEvent(client, display, w, event_mask)
+    while true do
+        for k,v in pairs(event_queue) do
+            local good = event_mask ~= nil
+            if event_mask ~= nil then for l,x in pairs(event_mask) do if x == v[1] then good = true end end end
+            if good then for l,x in pairs(v) do if w == x then return table.remove(event_queue, k) end end end
+        end
+        CCWinX.Flush(client, display)
+        handleEvent(display, os.pullEvent())
+    end
+end
+
+-- If run under CCKernel2 through a shell or forked: start a CCWinX server to listen to clients
 -- If loaded as an API under CCKernel2: provide functions to send messages to a CCWinX server
 -- If run without CCKernel2 through a shell: do nothing
--- If loaded as an API without CCKernel2: provide functions to run a server through messages
-
-local function ServeWindows(...)
-
-end
+-- If loaded as an API without CCKernel2: provide functions to run a server
 
 if shell or _FORK then
     if kernel then
@@ -2155,37 +2464,8 @@ if shell or _FORK then
         if f == nil then log:error("Could not load default font") end
         while true do
             local args = {os.pullEvent()}
-            for k,v in pairs(displays) do if v.screensaver_coro ~= nil then
-                coroutine.resume(v.screensaver_coro)
-                if coroutine.status(v.screensaver_coro) ~= "suspended" then
-                    v.screensaver_coro = nil
-                    v.screensaver_timer = os.startTimer(screensaver.timeout)
-                end
-            end end
+            for k,v in pairs(displays) do handleEvent(v, table.unpack(args)) end
             local ev = table.remove(args, 1)
-            if ev == "key" or ev == "char" or ev == "key_up" then
-                local pids = {}
-                for k,v in pairs(displays) do for l,w in pairs(v.clients) do if not pids[w] then
-                    kernel.send(w, ev, table.unpack(args))
-                    pids[w] = true
-                end end end
-                if screensaver.timeout ~= 0 then for k,v in pairs(displays) do 
-                    os.cancelTimer(v.screensaver_timer)
-                    v.screensaver_timer = os.startTimer(screensaver.timeout)
-                end end
-            elseif ev == "mouse_click" or ev == "mouse_up" or ev == "mouse_drag" or ev == "mouse_scroll" then
-                -- Handle mouse events
-                if screensaver.timeout ~= 0 then for k,v in pairs(displays) do 
-                    os.cancelTimer(v.screensaver_timer)
-                    v.screensaver_timer = os.startTimer(screensaver.timeout)
-                end end
-            elseif ev == "timer" then
-                for k,v in pairs(displays) do if v.screensaver_timer == args[1] then 
-                    v.screensaver_timer = nil
-                    v.screensaver_coro = coroutine.create(CCWinX.ActivateScreenSaver)
-                    coroutine.resume(v.screensaver_coro, _PID, v, true)
-                end end
-            end
             local pid = table.remove(args, 1)
             if type(pid) == "number" then
                 if ev == "CCWinX.GetServerPID" and type(pid) == "number" then
@@ -2194,7 +2474,7 @@ if shell or _FORK then
                     kernel.send(pid, "CCWinX."..ev, CCWinX[ev](pid, table.unpack(args)))
                 end
             end
-            ServeWindows(ev, pid, table.unpack(args))
+            
         end
     else
         print("CCWinX requires CCKernel2 to run in server mode. Without CCKernel2, programs can only load CCWinX as an API.")
