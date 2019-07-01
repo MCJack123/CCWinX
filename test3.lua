@@ -14,7 +14,7 @@ local text_box = {
 }
 
 local function x_connect()
-    text_box.display = CCWinX.OpenDisplay(0)
+    text_box.display = CCWinX.OpenDisplay("left")
     if not text_box.display then
         error("Could not open display.")
     end
@@ -23,8 +23,9 @@ end
 
 local function create_window()
     text_box.width = 300
-    text_box.height = 300
+    text_box.height = 150
     text_box.window = CCWinX.CreateSimpleWindow(text_box.display, text_box.root, 1, 1, text_box.width, text_box.height, 0, colors.black, colors.white)
+    assert(type(text_box.window) == "table", CCWinX.ErrorStrings[text_box.window])
     CCWinX.MapWindow(text_box.display, text_box.window)
 end
 
@@ -48,8 +49,8 @@ local function draw_screen()
     x = math.floor((text_box.width - overall.width) / 2)
     y = math.floor(text_box.height / 2 + (ascent - descent) / 2)
     CCWinX.ClearWindow(text_box.display, text_box.window)
-    assert(CCWinX.DrawString(text_box.display, text_box.window, text_box.gc, 
-        x, y, text_box.text) == nil)
+    local err = CCWinX.DrawString(text_box.display, text_box.window, text_box.gc, x, y, text_box.text)
+    assert(err == nil, CCWinX.ErrorStrings[err])
     --CCWinX.Flush(text_box.display)
     text_box.window.draw()
 end
@@ -57,16 +58,22 @@ end
 local function event_loop()
     while true do
         local e = {os.pullEvent()}
+        print(e[1])
         if e[1] == "char" and e[2] == "q" then break 
         elseif e[1] == "char" and e[2] == "r" then draw_screen() end
     end
 end
 
 text_box.text = "Hello World!"
+print("Connecting...")
 x_connect()
+print("Creating window...")
 create_window()
+print("Setting up resources...")
 set_up_gc()
 set_up_font()
+print("Drawing...")
 draw_screen()
+print("Waiting...")
 event_loop()
 CCWinX.CloseDisplay(text_box.display)

@@ -506,11 +506,19 @@ local function handleEvent(display, ev, ...)
         end
         return
     else return end
-    if screensaver.timeout ~= 0 then
+    if screensaver.timeout ~= 0 and display.screensaver_timer ~= nil then
         os.cancelTimer(display.screensaver_timer)
         display.screensaver_timer = os.startTimer(screensaver.timeout)
     end
 end
+
+-- sleep if time's running out
+local lastTime = os.epoch("utc")
+local function nosleep(display) if os.epoch("utc") - lastTime > 15000 then
+    os.queueEvent("nosleep")
+    handleEvent(display, os.pullEvent())
+    lastTime = os.epoch("utc")
+end end
 
 -- Beginning of public API
 
@@ -528,7 +536,7 @@ Error = {
     WTF = 9999, -- Should never happen
 }
 
-local ErrorStrings = {
+ErrorStrings = {
     [Error.BadColor] = "Invalid color",
     [Error.BadMatch] = "Bad match",
     [Error.BadValue] = "Bad value",
@@ -1189,6 +1197,7 @@ function CCWinX.CreateSimpleWindow(client, display, parent, x, y, width, height,
         if not retval.display then return end
         for y,r in pairs(retval.buffer) do for x,c in pairs(r) do 
             parent.drawPixel(retval.frame.x + x - 1, retval.frame.y + y - 1, c > 0 and c or parent.getPixel(retval.frame.x + x, retval.frame.y + y)) 
+            nosleep(retval.display)
         end end
         for k,v in pairs(retval.children) do v.draw() end
     end
@@ -1255,6 +1264,7 @@ function CCWinX.CreateWindow(client, display, parent, x, y, width, height, borde
         if not retval.display then return end
         for y,r in pairs(retval.buffer) do for x,c in pairs(r) do 
             parent.drawPixel(retval.frame.x + x - 1, retval.frame.y + y - 1, c > 0 and c or parent.getPixel(retval.frame.x + x, retval.frame.y + y)) 
+            nosleep(retval.display)
         end end
         for k,v in pairs(retval.children) do v.draw() end
     end
@@ -1975,7 +1985,7 @@ local function tonum_rep(str, ...) if str ~= nil then return tonumber(str), tonu
 -- @return An object describing the display or nil
 function CCWinX.OpenDisplay(client, id)
     if displays[id] ~= nil then 
-        for k,v in pairs(retval.clients) do if v == client then
+        for k,v in pairs(displays[id].clients) do if v == client then
             log:warn("Already opened display: " .. id)
             return displays[id]
         end end
@@ -2035,6 +2045,7 @@ function CCWinX.OpenDisplay(client, id)
     function root.draw()
         for y,r in pairs(root.buffer) do for x,c in pairs(r) do 
             retval.setPixel(root.frame.x + x - 1, root.frame.y + y - 1, c > 0 and c or retval.getPixel(root.frame.x + x - 1, root.frame.y + y - 1)) 
+            nosleep(retval)
         end end
         for k,v in pairs(root.children) do v.draw() end
     end
@@ -2091,7 +2102,7 @@ function CCWinX.PullEvent(client, mask)
             if mask == nil or mask == ev[1] then return table.unpack(ev) end
         end
         local e = {os.pullEvent()}
-        if mask == nil or mask == e[1] then return table.unpack(e) end
+        --if mask == nil or mask == e[1] then return table.unpack(e) end
     end
 end
 
@@ -2191,7 +2202,11 @@ CCWinX.TextExtents = CCWinX.QueryTextExtents
 --- Queues an event using a syntax similar to os.queueEvent.
 -- @param type The event type
 -- @param ... The event arguments
-function CCWinX.QueueEvent(client, type, ...) table.insert(event_queue, {type, ...}) end
+function CCWinX.QueueEvent(client, type, ...) 
+    log:debug("Queueing event " .. type)
+    nosleep(({...})[3])
+    table.insert(event_queue, {type, ...}) 
+end
 
 --- Raises a window to the top of the parent's stack.
 -- @param display The display to use
@@ -2452,7 +2467,7 @@ end
 -- If run without CCKernel2 through a shell: do nothing
 -- If loaded as an API without CCKernel2: provide functions to run a server
 
-if shell or _FORK then
+if shell then
     if kernel then
         log:open()
         log:info("CCWinX Server v0.0.1")
@@ -2471,9 +2486,10 @@ if shell or _FORK then
                 elseif type(CCWinX[ev]) == "function" then
                     kernel.send(pid, "CCWinX."..ev, CCWinX[ev](pid, table.unpack(args)))
                 end
-            end
-            
+            elseif ev == "char" and pid == "q" then break end
         end
+        log:info("Closing server...")
+        for k,v in pairs(displays) do CCWinX.CloseDisplay(_PID, v) end
     else
         print("CCWinX requires CCKernel2 to run in server mode. Without CCKernel2, programs can only load CCWinX as an API.")
     end
@@ -2493,8 +2509,10 @@ else
         if pid == nil then error("Could not find any running CCWinX server. Please start a server before loading CCWinX.") end
         for k,v in pairs(CCWinX) do
             _ENV[k] = function(...) 
-                kernel.send(pid, k, ...)
-                return os.pullEvent("CCWinX." .. k)
+                kernel.send(pid, k, _G._PID, ...)
+                local retval = {os.pullEvent("CCWinX." .. k)}
+                table.remove(retval, 1)
+                return table.unpack(retval)
             end
         end
     else
